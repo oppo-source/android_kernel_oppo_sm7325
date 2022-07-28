@@ -68,7 +68,8 @@ void hda_codec_jack_check(struct snd_sof_dev *sdev)
 		 * has been recorded in STATESTS
 		 */
 		if (codec->jacktbl.used)
-			pm_request_resume(&codec->core.dev);
+			schedule_delayed_work(&codec->jackpoll_work,
+					      codec->jackpoll_interval);
 }
 #else
 void hda_codec_jack_wake_enable(struct snd_sof_dev *sdev) {}

@@ -405,6 +405,13 @@ struct file *sock_alloc_file(struct socket *sock, int flags, const char *dname)
 
 	sock->file = file;
 	file->private_data = sock;
+
+	#if IS_ENABLED(CONFIG_OPLUS_FEATURE_NWPOWER)
+	if (sock->sk) {
+		sock->sk->sk_oplus_pid = current->tgid;
+	}
+	#endif /* CONFIG_OPLUS_FEATURE_NWPOWER */
+
 	return file;
 }
 EXPORT_SYMBOL(sock_alloc_file);
@@ -1054,7 +1061,7 @@ static long sock_do_ioctl(struct net *net, struct socket *sock,
 		rtnl_unlock();
 		if (!err && copy_to_user(argp, &ifc, sizeof(struct ifconf)))
 			err = -EFAULT;
-	} else if (is_socket_ioctl_cmd(cmd)) {
+	} else {
 		struct ifreq ifr;
 		bool need_copyout;
 		if (copy_from_user(&ifr, argp, sizeof(struct ifreq)))
@@ -1063,8 +1070,6 @@ static long sock_do_ioctl(struct net *net, struct socket *sock,
 		if (!err && need_copyout)
 			if (copy_to_user(argp, &ifr, sizeof(struct ifreq)))
 				return -EFAULT;
-	} else {
-		err = -ENOTTY;
 	}
 	return err;
 }
@@ -1073,6 +1078,19 @@ static long sock_do_ioctl(struct net *net, struct socket *sock,
  *	With an ioctl, arg may well be a user mode pointer, but we don't know
  *	what to do with it - that's up to the protocol still.
  */
+
+/**
+ *	get_net_ns - increment the refcount of the network namespace
+ *	@ns: common namespace (net)
+ *
+ *	Returns the net's common namespace.
+ */
+
+struct ns_common *get_net_ns(struct ns_common *ns)
+{
+	return &get_net(container_of(ns, struct net, ns))->ns;
+}
+EXPORT_SYMBOL_GPL(get_net_ns);
 
 static long sock_ioctl(struct file *file, unsigned cmd, unsigned long arg)
 {
@@ -3231,8 +3249,6 @@ static int compat_ifr_data_ioctl(struct net *net, unsigned int cmd,
 	struct ifreq ifreq;
 	u32 data32;
 
-	if (!is_socket_ioctl_cmd(cmd))
-		return -ENOTTY;
 	if (copy_from_user(ifreq.ifr_name, u_ifreq32->ifr_name, IFNAMSIZ))
 		return -EFAULT;
 	if (get_user(data32, &u_ifreq32->ifr_data))

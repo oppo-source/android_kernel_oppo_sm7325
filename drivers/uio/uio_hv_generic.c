@@ -296,10 +296,8 @@ hv_uio_probe(struct hv_device *dev,
 
 	ret = vmbus_establish_gpadl(channel, pdata->recv_buf,
 				    RECV_BUFFER_SIZE, &pdata->recv_gpadl);
-	if (ret) {
-		vfree(pdata->recv_buf);
+	if (ret)
 		goto fail_close;
-	}
 
 	/* put Global Physical Address Label in name */
 	snprintf(pdata->recv_name, sizeof(pdata->recv_name),
@@ -318,10 +316,8 @@ hv_uio_probe(struct hv_device *dev,
 
 	ret = vmbus_establish_gpadl(channel, pdata->send_buf,
 				    SEND_BUFFER_SIZE, &pdata->send_gpadl);
-	if (ret) {
-		vfree(pdata->send_buf);
+	if (ret)
 		goto fail_close;
-	}
 
 	snprintf(pdata->send_name, sizeof(pdata->send_name),
 		 "send:%u", pdata->send_gpadl);

@@ -228,6 +228,15 @@ static const struct axg_tdm_formatter_driver axg_tdmin_drv = {
 	.regmap_cfg	= &axg_tdmin_regmap_cfg,
 	.ops		= &axg_tdmin_ops,
 	.quirks		= &(const struct axg_tdm_formatter_hw) {
+		.skew_offset	= 2,
+	},
+};
+
+static const struct axg_tdm_formatter_driver g12a_tdmin_drv = {
+	.component_drv	= &axg_tdmin_component_drv,
+	.regmap_cfg	= &axg_tdmin_regmap_cfg,
+	.ops		= &axg_tdmin_ops,
+	.quirks		= &(const struct axg_tdm_formatter_hw) {
 		.skew_offset	= 3,
 	},
 };
@@ -238,10 +247,10 @@ static const struct of_device_id axg_tdmin_of_match[] = {
 		.data = &axg_tdmin_drv,
 	}, {
 		.compatible = "amlogic,g12a-tdmin",
-		.data = &axg_tdmin_drv,
+		.data = &g12a_tdmin_drv,
 	}, {
 		.compatible = "amlogic,sm1-tdmin",
-		.data = &axg_tdmin_drv,
+		.data = &g12a_tdmin_drv,
 	}, {}
 };
 MODULE_DEVICE_TABLE(of, axg_tdmin_of_match);

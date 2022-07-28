@@ -82,7 +82,7 @@ bool irq_fpu_usable(void)
 }
 EXPORT_SYMBOL(irq_fpu_usable);
 
-void kernel_fpu_begin_mask(unsigned int kfpu_mask)
+void kernel_fpu_begin(void)
 {
 	preempt_disable();
 
@@ -102,14 +102,13 @@ void kernel_fpu_begin_mask(unsigned int kfpu_mask)
 	}
 	__cpu_invalidate_fpregs_state();
 
-	/* Put sane initial values into the control registers. */
-	if (likely(kfpu_mask & KFPU_MXCSR) && boot_cpu_has(X86_FEATURE_XMM))
+	if (boot_cpu_has(X86_FEATURE_XMM))
 		ldmxcsr(MXCSR_DEFAULT);
 
-	if (unlikely(kfpu_mask & KFPU_387) && boot_cpu_has(X86_FEATURE_FPU))
+	if (boot_cpu_has(X86_FEATURE_FPU))
 		asm volatile ("fninit");
 }
-EXPORT_SYMBOL_GPL(kernel_fpu_begin_mask);
+EXPORT_SYMBOL_GPL(kernel_fpu_begin);
 
 void kernel_fpu_end(void)
 {

@@ -523,10 +523,18 @@ static struct snd_soc_dai_driver ak4497_dai = {
 	.ops = &ak4458_dai_ops,
 };
 
-static void ak4458_reset(struct ak4458_priv *ak4458, bool active)
+static void ak4458_power_off(struct ak4458_priv *ak4458)
 {
 	if (ak4458->reset_gpiod) {
-		gpiod_set_value_cansleep(ak4458->reset_gpiod, active);
+		gpiod_set_value_cansleep(ak4458->reset_gpiod, 0);
+		usleep_range(1000, 2000);
+	}
+}
+
+static void ak4458_power_on(struct ak4458_priv *ak4458)
+{
+	if (ak4458->reset_gpiod) {
+		gpiod_set_value_cansleep(ak4458->reset_gpiod, 1);
 		usleep_range(1000, 2000);
 	}
 }
@@ -540,7 +548,7 @@ static int ak4458_init(struct snd_soc_component *component)
 	if (ak4458->mute_gpiod)
 		gpiod_set_value_cansleep(ak4458->mute_gpiod, 1);
 
-	ak4458_reset(ak4458, false);
+	ak4458_power_on(ak4458);
 
 	ret = snd_soc_component_update_bits(component, AK4458_00_CONTROL1,
 			    0x80, 0x80);   /* ACKS bit = 1; 10000000 */
@@ -563,7 +571,7 @@ static void ak4458_remove(struct snd_soc_component *component)
 {
 	struct ak4458_priv *ak4458 = snd_soc_component_get_drvdata(component);
 
-	ak4458_reset(ak4458, true);
+	ak4458_power_off(ak4458);
 }
 
 #ifdef CONFIG_PM
@@ -573,7 +581,7 @@ static int __maybe_unused ak4458_runtime_suspend(struct device *dev)
 
 	regcache_cache_only(ak4458->regmap, true);
 
-	ak4458_reset(ak4458, true);
+	ak4458_power_off(ak4458);
 
 	if (ak4458->mute_gpiod)
 		gpiod_set_value_cansleep(ak4458->mute_gpiod, 0);
@@ -588,8 +596,8 @@ static int __maybe_unused ak4458_runtime_resume(struct device *dev)
 	if (ak4458->mute_gpiod)
 		gpiod_set_value_cansleep(ak4458->mute_gpiod, 1);
 
-	ak4458_reset(ak4458, true);
-	ak4458_reset(ak4458, false);
+	ak4458_power_off(ak4458);
+	ak4458_power_on(ak4458);
 
 	regcache_cache_only(ak4458->regmap, false);
 	regcache_mark_dirty(ak4458->regmap);
@@ -707,7 +715,6 @@ static const struct of_device_id ak4458_of_match[] = {
 	{ .compatible = "asahi-kasei,ak4497", .data = &ak4497_drvdata},
 	{ },
 };
-MODULE_DEVICE_TABLE(of, ak4458_of_match);
 
 static struct i2c_driver ak4458_i2c_driver = {
 	.driver = {

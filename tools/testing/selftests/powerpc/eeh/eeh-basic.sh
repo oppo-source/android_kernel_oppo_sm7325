@@ -81,5 +81,5 @@ echo "$failed devices failed to recover ($dev_count tested)"
 lspci | diff -u $pre_lspci -
 rm -f $pre_lspci
 
-test "$failed" -eq 0
+test "$failed" == 0
 exit $?

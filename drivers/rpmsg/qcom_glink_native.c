@@ -45,7 +45,7 @@ do {									     \
 	if (ch->glink) {						     \
 		ipc_log_string(ch->glink->ilc, "%s[%d:%d] %s: "x, ch->name,  \
 			       ch->lcid, ch->rcid, __func__, ##__VA_ARGS__); \
-		dev_err_ratelimited(ch->glink->dev, "[%s]: "x, __func__, ##__VA_ARGS__); \
+		dev_err(ch->glink->dev, "[%s]: "x, __func__, ##__VA_ARGS__); \
 	}								     \
 } while (0)
 
@@ -1044,7 +1044,6 @@ static int qcom_glink_rx_data(struct qcom_glink *glink, size_t avail)
 			dev_err(glink->dev,
 				"no intent found for channel %s intent %d",
 				channel->name, liid);
-			ret = -ENOENT;
 			goto advance_rx;
 		}
 	}
@@ -1070,7 +1069,7 @@ static int qcom_glink_rx_data(struct qcom_glink *glink, size_t avail)
 					channel->ept.priv,
 					RPMSG_ADDR_ANY);
 
-			if (ret < 0 && ret != -ENODEV) {
+			if (ret < 0) {
 				CH_ERR(channel,
 					"callback error ret = %d\n", ret);
 				ret = 0;
@@ -2159,13 +2158,13 @@ struct qcom_glink *qcom_glink_native_probe(struct device *dev,
 	irq = of_irq_get(dev->of_node, 0);
 	ret = devm_request_irq(dev, irq,
 			       qcom_glink_native_intr,
-			       IRQF_NO_SUSPEND | IRQF_SHARED,
+			       IRQF_SHARED,
 			       glink->irqname, glink);
 	if (ret) {
 		dev_err(dev, "failed to request IRQ\n");
 		goto unregister;
 	}
-
+	enable_irq_wake(irq);
 	glink->irq = irq;
 
 	size = of_property_count_u32_elems(dev->of_node, "cpu-affinity");

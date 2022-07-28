@@ -932,10 +932,8 @@ static blk_status_t sd_setup_write_zeroes_cmnd(struct scsi_cmnd *cmd)
 		}
 	}
 
-	if (sdp->no_write_same) {
-		rq->rq_flags |= RQF_QUIET;
+	if (sdp->no_write_same)
 		return BLK_STS_TARGET;
-	}
 
 	if (sdkp->ws16 || lba > 0xffffffff || nr_blocks > 0xffff)
 		return sd_setup_write_same16_cmnd(cmd, false);

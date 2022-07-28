@@ -982,7 +982,7 @@ static int soc_tplg_denum_create_values(struct soc_enum *se,
 		return -EINVAL;
 
 	se->dobj.control.dvalues = kzalloc(le32_to_cpu(ec->items) *
-					   sizeof(*se->dobj.control.dvalues),
+					   sizeof(u32),
 					   GFP_KERNEL);
 	if (!se->dobj.control.dvalues)
 		return -ENOMEM;

@@ -534,22 +534,20 @@ int snd_bebob_stream_init_duplex(struct snd_bebob *bebob)
 static int keep_resources(struct snd_bebob *bebob, struct amdtp_stream *stream,
 			  unsigned int rate, unsigned int index)
 {
-	unsigned int pcm_channels;
-	unsigned int midi_ports;
+	struct snd_bebob_stream_formation *formation;
 	struct cmp_connection *conn;
 	int err;
 
 	if (stream == &bebob->tx_stream) {
-		pcm_channels = bebob->tx_stream_formations[index].pcm;
-		midi_ports = bebob->midi_input_ports;
+		formation = bebob->tx_stream_formations + index;
 		conn = &bebob->out_conn;
 	} else {
-		pcm_channels = bebob->rx_stream_formations[index].pcm;
-		midi_ports = bebob->midi_output_ports;
+		formation = bebob->rx_stream_formations + index;
 		conn = &bebob->in_conn;
 	}
 
-	err = amdtp_am824_set_parameters(stream, rate, pcm_channels, midi_ports, false);
+	err = amdtp_am824_set_parameters(stream, rate, formation->pcm,
+					 formation->midi, false);
 	if (err < 0)
 		return err;
 

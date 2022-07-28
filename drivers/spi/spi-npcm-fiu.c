@@ -677,7 +677,8 @@ static int npcm_fiu_probe(struct platform_device *pdev)
 	struct npcm_fiu_spi *fiu;
 	void __iomem *regbase;
 	struct resource *res;
-	int id, ret;
+	int ret;
+	int id;
 
 	ctrl = devm_spi_alloc_master(dev, sizeof(*fiu));
 	if (!ctrl)
@@ -737,9 +738,9 @@ static int npcm_fiu_probe(struct platform_device *pdev)
 
 	ret = devm_spi_register_master(dev, ctrl);
 	if (ret)
-		clk_disable_unprepare(fiu->clk);
+		return ret;
 
-	return ret;
+	return 0;
 }
 
 static int npcm_fiu_remove(struct platform_device *pdev)

@@ -1,0 +1,9 @@
+obj-$(CONFIG_OPLUS_FINGERPRINT_COMMON) += oplus_fp_common/
+
+### Optical fingerprint sensor
+ifneq ($(CONFIG_OPLUS_FINGERPRINT_GOODIX)_$(CONFIG_OPLUS_FINGERPRINT_GOODIX_OPTICAL), _)
+obj-y += goodix_optical_fp/
+endif
+
+### FEATURE MACRO
+ccflags-$(CONFIG_OPLUS_FINGERPRINT_NAVIGATION_ENABLE) += -DFP_NAVIGATION_ENABLE

@@ -178,6 +178,9 @@ static void freezer_attach(struct cgroup_taskset *tset)
 		if (!(freezer->state & CGROUP_FREEZING)) {
 			__thaw_task(task);
 		} else {
+                       if (task->tgid == task->pid) {
+                               pr_info("from: %s[%d] , to freeze: %s[%d]", current->comm, current->pid, task->comm, task->pid);
+                       }
 			freeze_task(task);
 			/* clear FROZEN and propagate upwards */
 			while (freezer && (freezer->state & CGROUP_FROZEN)) {

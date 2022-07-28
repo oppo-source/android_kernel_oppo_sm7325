@@ -210,11 +210,9 @@ static struct sk_buff *esp6_gso_segment(struct sk_buff *skb,
 	skb->encap_hdr_csum = 1;
 
 	if (!(features & NETIF_F_HW_ESP) || x->xso.dev != skb->dev)
-		esp_features = features & ~(NETIF_F_SG | NETIF_F_CSUM_MASK |
-					    NETIF_F_SCTP_CRC);
+		esp_features = features & ~(NETIF_F_SG | NETIF_F_CSUM_MASK);
 	else if (!(features & NETIF_F_HW_ESP_TX_CSUM))
-		esp_features = features & ~(NETIF_F_CSUM_MASK |
-					    NETIF_F_SCTP_CRC);
+		esp_features = features & ~NETIF_F_CSUM_MASK;
 
 	xo->flags |= XFRM_GSO_SEGMENT;
 

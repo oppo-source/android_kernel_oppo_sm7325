@@ -44,7 +44,6 @@
 #include <linux/usb/dwc3-msm.h>
 #include <linux/usb/role.h>
 #include <linux/usb/redriver.h>
-#include <linux/dma-iommu.h>
 #ifdef CONFIG_QGKI_MSM_BOOT_TIME_MARKER
 #include <soc/qcom/boot_stats.h>
 #endif
@@ -552,6 +551,39 @@ static void dwc3_pwr_event_handler(struct dwc3_msm *mdwc);
 static int dwc3_msm_gadget_vbus_draw(struct dwc3_msm *mdwc, unsigned int mA);
 static void dwc3_msm_notify_event(struct dwc3 *dwc,
 		enum dwc3_notify_event event, unsigned int value);
+
+#ifdef OPLUS_FEATURE_CHG_BASIC
+static bool (*oplus_ignore_usb_notify)(void);
+struct device	*oplus_dev = NULL;
+static int dwc3_msm_usb_set_role(struct device *dev, enum usb_role role);
+void oplus_dwc3_config_usbphy_pfunc(bool (*pfunc)(void))
+{
+	oplus_ignore_usb_notify = pfunc;
+}
+EXPORT_SYMBOL(oplus_dwc3_config_usbphy_pfunc);
+
+void oplus_usb_set_none_role(void)
+{
+	if (oplus_dev)
+		dwc3_msm_usb_set_role(oplus_dev, USB_ROLE_NONE);
+	printk(KERN_ERR "%s\n", __func__);
+}
+EXPORT_SYMBOL(oplus_usb_set_none_role);
+
+static bool oplus_dwc3_need_set_usbphy_hz(void)
+{
+	bool ret = false;
+
+	if (oplus_ignore_usb_notify == NULL) {
+		ret = false;
+	} else {
+		ret = oplus_ignore_usb_notify();
+	}
+
+	printk(KERN_ERR "%s, set usbphy hz:%d\n", __func__, ret);
+	return ret;
+}
+#endif
 
 /**
  *
@@ -3283,7 +3315,7 @@ static int dwc3_msm_suspend(struct dwc3_msm *mdwc, bool force_power_collapse,
 		dbg_event(0xFF, "pend evt", 0);
 
 	/* disable power event irq, hs and ss phy irq is used as wake up src */
-	disable_irq_nosync(mdwc->wakeup_irq[PWR_EVNT_IRQ].irq);
+	disable_irq(mdwc->wakeup_irq[PWR_EVNT_IRQ].irq);
 
 	dwc3_set_phy_speed_flags(mdwc);
 	/* Suspend HS PHY */
@@ -4213,6 +4245,13 @@ static enum usb_role dwc3_msm_usb_get_role(struct device *dev)
 	return role;
 }
 
+#ifdef OPLUS_FEATURE_CHG_BASIC
+bool __attribute__((weak)) oplus_is_pd_svooc(void)
+{
+	return false;
+}
+#endif
+
 static int dwc3_msm_usb_set_role(struct device *dev, enum usb_role role)
 {
 	struct dwc3_msm *mdwc = dev_get_drvdata(dev);
@@ -4220,6 +4259,12 @@ static int dwc3_msm_usb_set_role(struct device *dev, enum usb_role role)
 	enum usb_role cur_role = USB_ROLE_NONE;
 
 	cur_role = dwc3_msm_usb_get_role(dev);
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	if (oplus_dwc3_need_set_usbphy_hz() == true && role != USB_ROLE_NONE) {
+		pr_err("!!!ignore the notify to start USB device mode");
+		return 0;
+	}
+#endif
 
 	switch (role) {
 	case USB_ROLE_HOST:
@@ -4804,9 +4849,6 @@ static int dwc3_msm_probe(struct platform_device *pdev)
 				"qcom,use-pdc-interrupts");
 	dwc3_set_notifier(&dwc3_msm_notify_event);
 
-	if (of_property_read_bool(node, "qcom,iommu-best-fit-algo"))
-		iommu_dma_enable_best_fit_algo(dev);
-
 	if (dma_set_mask_and_coherent(dev, DMA_BIT_MASK(64))) {
 		dev_err(&pdev->dev, "setting DMA mask to 64 failed.\n");
 		if (dma_set_mask_and_coherent(dev, DMA_BIT_MASK(32))) {
@@ -5081,6 +5123,10 @@ static int dwc3_msm_probe(struct platform_device *pdev)
 		dwc3_ext_event_notify(mdwc);
 	}
 
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	oplus_dev = mdwc->dev;
+	printk(KERN_ERR "%s, init oplus_dev\n", __func__);
+#endif
 	device_create_file(&pdev->dev, &dev_attr_orientation);
 	device_create_file(&pdev->dev, &dev_attr_mode);
 	device_create_file(&pdev->dev, &dev_attr_speed);
@@ -5742,10 +5788,10 @@ static void dwc3_otg_sm_work(struct work_struct *w)
 		if (test_bit(ID, &mdwc->inputs) &&
 				!test_bit(B_SESS_VLD, &mdwc->inputs)) {
 			dbg_event(0xFF, "undef_id_!bsv", 0);
-			dwc3_msm_resume(mdwc);
 			pm_runtime_set_active(mdwc->dev);
 			pm_runtime_enable(mdwc->dev);
 			pm_runtime_get_noresume(mdwc->dev);
+			dwc3_msm_resume(mdwc);
 			pm_runtime_put_sync(mdwc->dev);
 			dbg_event(0xFF, "Undef NoUSB",
 				atomic_read(&mdwc->dev->power.usage_count));

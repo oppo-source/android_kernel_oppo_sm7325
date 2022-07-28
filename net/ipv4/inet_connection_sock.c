@@ -700,15 +700,12 @@ static bool reqsk_queue_unlink(struct request_sock *req)
 	return found;
 }
 
-bool inet_csk_reqsk_queue_drop(struct sock *sk, struct request_sock *req)
+void inet_csk_reqsk_queue_drop(struct sock *sk, struct request_sock *req)
 {
-	bool unlinked = reqsk_queue_unlink(req);
-
-	if (unlinked) {
+	if (reqsk_queue_unlink(req)) {
 		reqsk_queue_removed(&inet_csk(sk)->icsk_accept_queue, req);
 		reqsk_put(req);
 	}
-	return unlinked;
 }
 EXPORT_SYMBOL(inet_csk_reqsk_queue_drop);
 
@@ -843,7 +840,6 @@ struct sock *inet_csk_clone_lock(const struct sock *sk,
 		newicsk->icsk_retransmits = 0;
 		newicsk->icsk_backoff	  = 0;
 		newicsk->icsk_probes_out  = 0;
-		newicsk->icsk_probes_tstamp = 0;
 
 		/* Deinitialize accept_queue to trap illegal accesses. */
 		memset(&newicsk->icsk_accept_queue, 0, sizeof(newicsk->icsk_accept_queue));
@@ -1126,6 +1122,14 @@ struct dst_entry *inet_csk_update_pmtu(struct sock *sk, u32 mtu)
 	}
 	dst->ops->update_pmtu(dst, sk, NULL, mtu, true);
 
+//	#ifdef OPLUS_FEATURE_WIFI_MTUDETECT
+	//Add for [1066205] when receives ICMP_FRAG_NEEDED, reduces the mtu of net_device.
+	pr_err("%s: current_mtu = %d , frag_mtu = %d mtu = %d\n", __func__, dst->dev->mtu, dst_mtu(dst),mtu);
+	//do not use dst_mtu here, because dst_mtu should be changed by update_pmtu after inet_csk_rebuild_route
+	if (dst->dev->mtu > mtu && mtu > IPV6_MIN_MTU) {
+		dst->dev->mtu = mtu;
+	}
+//	#endif /* OPLUS_FEATURE_WIFI_MTUDETECT */
 	dst = __sk_dst_check(sk, 0);
 	if (!dst)
 		dst = inet_csk_rebuild_route(sk, &inet->cork.fl);

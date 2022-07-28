@@ -17,6 +17,11 @@
 #include <linux/iversion.h>
 #include <linux/posix_acl.h>
 
+#ifdef CONFIG_OPLUS_FEATURE_ACM
+#include <linux/acm_fs.h>
+#define ACM_DELETE_ERR  999
+#endif
+
 static void fuse_advise_use_readdirplus(struct inode *dir)
 {
 	struct fuse_inode *fi = get_fuse_inode(dir);
@@ -311,7 +316,7 @@ static void fuse_dentry_canonical_path(const struct path *path, struct path *can
 	char *path_name;
 	int err;
 
-	path_name = (char *)get_zeroed_page(GFP_KERNEL);
+	path_name = (char*)__get_free_page(GFP_KERNEL);
 	if (!path_name)
 		goto default_path;
 
@@ -482,6 +487,9 @@ static int fuse_create_open(struct inode *dir, struct dentry *entry,
 	struct fuse_entry_out outentry;
 	struct fuse_inode *fi;
 	struct fuse_file *ff;
+#ifdef CONFIG_OPLUS_FEATURE_FUSE_FS_SHORTCIRCUIT
+	char *iname;
+#endif /* CONFIG_OPLUS_FEATURE_FUSE_FS_SHORTCIRCUIT */
 
 	/* Userspace expects S_IFREG in create mode */
 	BUG_ON((mode & S_IFMT) != S_IFREG);
@@ -517,7 +525,26 @@ static int fuse_create_open(struct inode *dir, struct dentry *entry,
 	args.out_args[0].value = &outentry;
 	args.out_args[1].size = sizeof(outopen);
 	args.out_args[1].value = &outopen;
+#ifdef CONFIG_OPLUS_FEATURE_FUSE_FS_SHORTCIRCUIT
+	args.lower_filp = NULL;
+	iname = inode_name(dir);
+	if (iname) {
+		/* compose full path */
+		if ((strlen(iname) + entry->d_name.len + 2) <= PATH_MAX) {
+			strlcat(iname, "/", PATH_MAX);
+			strlcat(iname, entry->d_name.name, PATH_MAX);
+		} else {
+			__putname(iname);
+			iname = NULL;
+		}
+	}
+	args.iname = iname;
+#endif /* CONFIG_OPLUS_FEATURE_FUSE_FS_SHORTCIRCUIT */
 	err = fuse_simple_request(fc, &args);
+#ifdef CONFIG_OPLUS_FEATURE_FUSE_FS_SHORTCIRCUIT
+	if (args.iname)
+		__putname(args.iname);
+#endif /* CONFIG_OPLUS_FEATURE_FUSE_FS_SHORTCIRCUIT */
 	if (err)
 		goto out_free_ff;
 
@@ -529,6 +556,9 @@ static int fuse_create_open(struct inode *dir, struct dentry *entry,
 	ff->fh = outopen.fh;
 	ff->nodeid = outentry.nodeid;
 	ff->open_flags = outopen.open_flags;
+#ifdef CONFIG_OPLUS_FEATURE_FUSE_FS_SHORTCIRCUIT
+	ff->lower_filp = args.lower_filp;
+#endif /* CONFIG_OPLUS_FEATURE_FUSE_FS_SHORTCIRCUIT */
 	inode = fuse_iget(dir->i_sb, outentry.nodeid, outentry.generation,
 			  &outentry.attr, entry_attr_timeout(&outentry), 0);
 	if (!inode) {
@@ -550,6 +580,9 @@ static int fuse_create_open(struct inode *dir, struct dentry *entry,
 		file->private_data = ff;
 		fuse_finish_open(inode, file);
 	}
+#ifdef CONFIG_OPLUS_FEATURE_ACM
+	monitor_acm2(entry, NULL, args.opcode);
+#endif
 	return err;
 
 out_free_ff:
@@ -663,6 +696,11 @@ static int create_new_entry(struct fuse_conn *fc, struct fuse_args *args,
 		fuse_change_entry_timeout(entry, &outarg);
 	}
 	fuse_dir_changed(dir);
+#ifdef CONFIG_OPLUS_FEATURE_ACM
+	if ((args->opcode == FUSE_MKNOD) ||
+		(args->opcode == FUSE_MKDIR))
+		monitor_acm2(entry, NULL, args->opcode);
+#endif
 	return 0;
 
  out_put_forget_req:
@@ -758,6 +796,13 @@ static int fuse_unlink(struct inode *dir, struct dentry *entry)
 	args.in_numargs = 1;
 	args.in_args[0].size = entry->d_name.len + 1;
 	args.in_args[0].value = entry->d_name.name;
+#ifdef CONFIG_OPLUS_FEATURE_ACM
+	err = monitor_acm2(entry, NULL, args.opcode);
+	if (err) {
+		err = ACM_DELETE_ERR;
+		return err;
+	}
+#endif
 	err = fuse_simple_request(fc, &args);
 	if (!err) {
 		struct inode *inode = d_inode(entry);
@@ -797,6 +842,13 @@ static int fuse_rmdir(struct inode *dir, struct dentry *entry)
 	args.in_numargs = 1;
 	args.in_args[0].size = entry->d_name.len + 1;
 	args.in_args[0].value = entry->d_name.name;
+#ifdef CONFIG_OPLUS_FEATURE_ACM
+	err = monitor_acm2(entry, NULL, args.opcode);
+	if (err) {
+		err = ACM_DELETE_ERR;
+		return err;
+	}
+#endif
 	err = fuse_simple_request(fc, &args);
 	if (!err) {
 		clear_nlink(d_inode(entry));
@@ -859,7 +911,9 @@ static int fuse_rename_common(struct inode *olddir, struct dentry *oldent,
 		if (d_really_is_positive(newent))
 			fuse_invalidate_entry(newent);
 	}
-
+#ifdef CONFIG_OPLUS_FEATURE_ACM
+	monitor_acm2(oldent, newent, args.opcode);
+#endif
 	return err;
 }
 
@@ -892,7 +946,6 @@ static int fuse_rename2(struct inode *olddir, struct dentry *oldent,
 					 FUSE_RENAME,
 					 sizeof(struct fuse_rename_in));
 	}
-
 	return err;
 }
 

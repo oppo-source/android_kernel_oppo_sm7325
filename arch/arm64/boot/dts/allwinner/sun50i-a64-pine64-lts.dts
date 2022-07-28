@@ -11,7 +11,3 @@
 	compatible = "pine64,pine64-lts", "allwinner,sun50i-r18",
 		     "allwinner,sun50i-a64";
 };
-
-&mmc0 {
-	broken-cd;		/* card detect is broken on *some* boards */
-};

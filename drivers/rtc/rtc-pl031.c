@@ -379,10 +379,8 @@ static int pl031_probe(struct amba_device *adev, const struct amba_id *id)
 
 	device_init_wakeup(&adev->dev, true);
 	ldata->rtc = devm_rtc_allocate_device(&adev->dev);
-	if (IS_ERR(ldata->rtc)) {
-		ret = PTR_ERR(ldata->rtc);
-		goto out;
-	}
+	if (IS_ERR(ldata->rtc))
+		return PTR_ERR(ldata->rtc);
 
 	ldata->rtc->ops = ops;
 

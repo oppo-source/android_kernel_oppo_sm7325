@@ -464,7 +464,8 @@ static int adis16400_initial_setup(struct iio_dev *indio_dev)
 		if (ret)
 			goto err_ret;
 
-		if (sscanf(indio_dev->name, "adis%u\n", &device_id) != 1) {
+		ret = sscanf(indio_dev->name, "adis%u\n", &device_id);
+		if (ret != 1) {
 			ret = -EINVAL;
 			goto err_ret;
 		}
@@ -650,6 +651,9 @@ static irqreturn_t adis16400_trigger_handler(int irq, void *p)
 	u32 old_speed_hz = st->adis.spi->max_speed_hz;
 	void *buffer;
 	int ret;
+
+	if (!adis->buffer)
+		return -ENOMEM;
 
 	if (!(st->variant->flags & ADIS16400_NO_BURST) &&
 		st->adis.spi->max_speed_hz > ADIS16400_SPI_BURST) {

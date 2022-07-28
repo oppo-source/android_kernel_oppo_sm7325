@@ -106,10 +106,6 @@ struct mapped_device {
 
 	struct block_device *bdev;
 
-	int swap_bios;
-	struct semaphore swap_bios_semaphore;
-	struct mutex swap_bios_lock;
-
 	struct dm_stats stats;
 
 	/* for blk-mq request-based DM support */

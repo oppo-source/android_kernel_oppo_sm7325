@@ -53,10 +53,9 @@ EXPORT_SYMBOL(ioremap);
 void __iomem *ioremap_prot(phys_addr_t paddr, unsigned long size,
 			   unsigned long flags)
 {
-	unsigned int off;
 	unsigned long vaddr;
 	struct vm_struct *area;
-	phys_addr_t end;
+	phys_addr_t off, end;
 	pgprot_t prot = __pgprot(flags);
 
 	/* Don't allow wraparound, zero size */
@@ -73,7 +72,7 @@ void __iomem *ioremap_prot(phys_addr_t paddr, unsigned long size,
 
 	/* Mappings have to be page-aligned */
 	off = paddr & ~PAGE_MASK;
-	paddr &= PAGE_MASK_PHYS;
+	paddr &= PAGE_MASK;
 	size = PAGE_ALIGN(end + 1) - paddr;
 
 	/*

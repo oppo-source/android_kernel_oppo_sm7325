@@ -327,14 +327,8 @@ int nfp_compile_flow_metadata(struct nfp_app *app,
 		goto err_free_ctx_entry;
 	}
 
-	/* Do net allocate a mask-id for pre_tun_rules. These flows are used to
-	 * configure the pre_tun table and are never actually send to the
-	 * firmware as an add-flow message. This causes the mask-id allocation
-	 * on the firmware to get out of sync if allocated here.
-	 */
 	new_mask_id = 0;
-	if (!nfp_flow->pre_tun_rule.dev &&
-	    !nfp_check_mask_add(app, nfp_flow->mask_data,
+	if (!nfp_check_mask_add(app, nfp_flow->mask_data,
 				nfp_flow->meta.mask_len,
 				&nfp_flow->meta.flags, &new_mask_id)) {
 		NL_SET_ERR_MSG_MOD(extack, "invalid entry: cannot allocate a new mask id");
@@ -365,8 +359,7 @@ int nfp_compile_flow_metadata(struct nfp_app *app,
 			goto err_remove_mask;
 		}
 
-		if (!nfp_flow->pre_tun_rule.dev &&
-		    !nfp_check_mask_remove(app, nfp_flow->mask_data,
+		if (!nfp_check_mask_remove(app, nfp_flow->mask_data,
 					   nfp_flow->meta.mask_len,
 					   NULL, &new_mask_id)) {
 			NL_SET_ERR_MSG_MOD(extack, "invalid entry: cannot release mask id");
@@ -381,10 +374,8 @@ int nfp_compile_flow_metadata(struct nfp_app *app,
 	return 0;
 
 err_remove_mask:
-	if (!nfp_flow->pre_tun_rule.dev)
-		nfp_check_mask_remove(app, nfp_flow->mask_data,
-				      nfp_flow->meta.mask_len,
-				      NULL, &new_mask_id);
+	nfp_check_mask_remove(app, nfp_flow->mask_data, nfp_flow->meta.mask_len,
+			      NULL, &new_mask_id);
 err_remove_rhash:
 	WARN_ON_ONCE(rhashtable_remove_fast(&priv->stats_ctx_table,
 					    &ctx_entry->ht_node,
@@ -415,10 +406,9 @@ int nfp_modify_flow_metadata(struct nfp_app *app,
 
 	__nfp_modify_flow_metadata(priv, nfp_flow);
 
-	if (!nfp_flow->pre_tun_rule.dev)
-		nfp_check_mask_remove(app, nfp_flow->mask_data,
-				      nfp_flow->meta.mask_len, &nfp_flow->meta.flags,
-				      &new_mask_id);
+	nfp_check_mask_remove(app, nfp_flow->mask_data,
+			      nfp_flow->meta.mask_len, &nfp_flow->meta.flags,
+			      &new_mask_id);
 
 	/* Update flow payload with mask ids. */
 	nfp_flow->unmasked_data[NFP_FL_MASK_ID_LOCATION] = new_mask_id;
@@ -490,12 +480,6 @@ const struct rhashtable_params nfp_flower_table_params = {
 	.automatic_shrinking	= true,
 };
 
-const struct rhashtable_params merge_table_params = {
-	.key_offset	= offsetof(struct nfp_merge_info, parent_ctx),
-	.head_offset	= offsetof(struct nfp_merge_info, ht_node),
-	.key_len	= sizeof(u64),
-};
-
 int nfp_flower_metadata_init(struct nfp_app *app, u64 host_ctx_count,
 			     unsigned int host_num_mems)
 {
@@ -512,10 +496,6 @@ int nfp_flower_metadata_init(struct nfp_app *app, u64 host_ctx_count,
 	if (err)
 		goto err_free_flow_table;
 
-	err = rhashtable_init(&priv->merge_table, &merge_table_params);
-	if (err)
-		goto err_free_stats_ctx_table;
-
 	get_random_bytes(&priv->mask_id_seed, sizeof(priv->mask_id_seed));
 
 	/* Init ring buffer and unallocated mask_ids. */
@@ -523,7 +503,7 @@ int nfp_flower_metadata_init(struct nfp_app *app, u64 host_ctx_count,
 		kmalloc_array(NFP_FLOWER_MASK_ENTRY_RS,
 			      NFP_FLOWER_MASK_ELEMENT_RS, GFP_KERNEL);
 	if (!priv->mask_ids.mask_id_free_list.buf)
-		goto err_free_merge_table;
+		goto err_free_stats_ctx_table;
 
 	priv->mask_ids.init_unallocated = NFP_FLOWER_MASK_ENTRY_RS - 1;
 
@@ -560,8 +540,6 @@ err_free_last_used:
 	kfree(priv->mask_ids.last_used);
 err_free_mask_id:
 	kfree(priv->mask_ids.mask_id_free_list.buf);
-err_free_merge_table:
-	rhashtable_destroy(&priv->merge_table);
 err_free_stats_ctx_table:
 	rhashtable_destroy(&priv->stats_ctx_table);
 err_free_flow_table:
@@ -579,8 +557,6 @@ void nfp_flower_metadata_cleanup(struct nfp_app *app)
 	rhashtable_free_and_destroy(&priv->flow_table,
 				    nfp_check_rhashtable_empty, NULL);
 	rhashtable_free_and_destroy(&priv->stats_ctx_table,
-				    nfp_check_rhashtable_empty, NULL);
-	rhashtable_free_and_destroy(&priv->merge_table,
 				    nfp_check_rhashtable_empty, NULL);
 	kvfree(priv->stats);
 	kfree(priv->mask_ids.mask_id_free_list.buf);

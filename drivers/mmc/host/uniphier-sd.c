@@ -639,7 +639,7 @@ static int uniphier_sd_probe(struct platform_device *pdev)
 
 	ret = tmio_mmc_host_probe(host);
 	if (ret)
-		goto disable_clk;
+		goto free_host;
 
 	ret = devm_request_irq(dev, irq, tmio_mmc_irq, IRQF_SHARED,
 			       dev_name(dev), host);
@@ -650,8 +650,6 @@ static int uniphier_sd_probe(struct platform_device *pdev)
 
 remove_host:
 	tmio_mmc_host_remove(host);
-disable_clk:
-	uniphier_sd_clk_disable(host);
 free_host:
 	tmio_mmc_host_free(host);
 
@@ -664,7 +662,6 @@ static int uniphier_sd_remove(struct platform_device *pdev)
 
 	tmio_mmc_host_remove(host);
 	uniphier_sd_clk_disable(host);
-	tmio_mmc_host_free(host);
 
 	return 0;
 }

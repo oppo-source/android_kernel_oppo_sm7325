@@ -5871,6 +5871,8 @@ static void mlx5_ib_unbind_slave_port(struct mlx5_ib_dev *ibdev,
 
 	port->mp.mpi = NULL;
 
+	list_add_tail(&mpi->list, &mlx5_ib_unaffiliated_port_list);
+
 	spin_unlock(&port->mp.mpi_lock);
 
 	err = mlx5_nic_vport_unaffiliate_multiport(mpi->mdev);
@@ -6023,8 +6025,6 @@ static void mlx5_ib_cleanup_multiport_master(struct mlx5_ib_dev *dev)
 				dev->port[i].mp.mpi = NULL;
 			} else {
 				mlx5_ib_dbg(dev, "unbinding port_num: %d\n", i + 1);
-				list_add_tail(&dev->port[i].mp.mpi->list,
-					      &mlx5_ib_unaffiliated_port_list);
 				mlx5_ib_unbind_slave_port(dev, dev->port[i].mp.mpi);
 			}
 		}
@@ -6173,7 +6173,7 @@ static int mlx5_ib_stage_init_init(struct mlx5_ib_dev *dev)
 
 	err = set_has_smi_cap(dev);
 	if (err)
-		goto err_mp;
+		return err;
 
 	if (!mlx5_core_mp_enabled(mdev)) {
 		for (i = 1; i <= dev->num_ports; i++) {
@@ -6213,7 +6213,8 @@ static int mlx5_ib_stage_init_init(struct mlx5_ib_dev *dev)
 
 err_mp:
 	mlx5_ib_cleanup_multiport_master(dev);
-	return err;
+
+	return -ENOMEM;
 }
 
 static int mlx5_ib_stage_flow_db_init(struct mlx5_ib_dev *dev)
@@ -6625,7 +6626,7 @@ static int mlx5_ib_stage_bfrag_init(struct mlx5_ib_dev *dev)
 
 	err = mlx5_alloc_bfreg(dev->mdev, &dev->fp_bfreg, false, true);
 	if (err)
-		mlx5_free_bfreg(dev->mdev, &dev->bfreg);
+		mlx5_free_bfreg(dev->mdev, &dev->fp_bfreg);
 
 	return err;
 }
@@ -6879,7 +6880,6 @@ static void *mlx5_ib_add_slave_port(struct mlx5_core_dev *mdev)
 
 		if (bound) {
 			rdma_roce_rescan_device(&dev->ib_dev);
-			mpi->ibdev->ib_active = true;
 			break;
 		}
 	}

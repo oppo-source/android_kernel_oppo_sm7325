@@ -445,11 +445,12 @@ static void mvebu_uart_shutdown(struct uart_port *port)
 
 static int mvebu_uart_baud_rate_set(struct uart_port *port, unsigned int baud)
 {
+	struct mvebu_uart *mvuart = to_mvuart(port);
 	unsigned int d_divisor, m_divisor;
 	u32 brdv, osamp;
 
-	if (!port->uartclk)
-		return -EOPNOTSUPP;
+	if (IS_ERR(mvuart->clk))
+		return -PTR_ERR(mvuart->clk);
 
 	/*
 	 * The baudrate is derived from the UART clock thanks to two divisors:
@@ -462,7 +463,7 @@ static int mvebu_uart_baud_rate_set(struct uart_port *port, unsigned int baud)
 	 * makes use of D to configure the desired baudrate.
 	 */
 	m_divisor = OSAMP_DEFAULT_DIVISOR;
-	d_divisor = DIV_ROUND_CLOSEST(port->uartclk, baud * m_divisor);
+	d_divisor = DIV_ROUND_UP(port->uartclk, baud * m_divisor);
 
 	brdv = readl(port->membase + UART_BRDV);
 	brdv &= ~BRDV_BAUD_MASK;
@@ -481,7 +482,7 @@ static void mvebu_uart_set_termios(struct uart_port *port,
 				   struct ktermios *old)
 {
 	unsigned long flags;
-	unsigned int baud, min_baud, max_baud;
+	unsigned int baud;
 
 	spin_lock_irqsave(&port->lock, flags);
 
@@ -500,21 +501,16 @@ static void mvebu_uart_set_termios(struct uart_port *port,
 		port->ignore_status_mask |= STAT_RX_RDY(port) | STAT_BRK_ERR;
 
 	/*
-	 * Maximal divisor is 1023 * 16 when using default (x16) scheme.
 	 * Maximum achievable frequency with simple baudrate divisor is 230400.
 	 * Since the error per bit frame would be of more than 15%, achieving
 	 * higher frequencies would require to implement the fractional divisor
 	 * feature.
 	 */
-	min_baud = DIV_ROUND_UP(port->uartclk, 1023 * 16);
-	max_baud = 230400;
-
-	baud = uart_get_baud_rate(port, termios, old, min_baud, max_baud);
+	baud = uart_get_baud_rate(port, termios, old, 0, 230400);
 	if (mvebu_uart_baud_rate_set(port, baud)) {
 		/* No clock available, baudrate cannot be changed */
 		if (old)
-			baud = uart_get_baud_rate(port, old, NULL,
-						  min_baud, max_baud);
+			baud = uart_get_baud_rate(port, old, NULL, 0, 230400);
 	} else {
 		tty_termios_encode_baud_rate(termios, baud, baud);
 		uart_update_timeout(port, termios->c_cflag, baud);
@@ -652,14 +648,6 @@ static void wait_for_xmitr(struct uart_port *port)
 				  (val & STAT_TX_RDY(port)), 1, 10000);
 }
 
-static void wait_for_xmite(struct uart_port *port)
-{
-	u32 val;
-
-	readl_poll_timeout_atomic(port->membase + UART_STAT, val,
-				  (val & STAT_TX_EMP), 1, 10000);
-}
-
 static void mvebu_uart_console_putchar(struct uart_port *port, int ch)
 {
 	wait_for_xmitr(port);
@@ -687,7 +675,7 @@ static void mvebu_uart_console_write(struct console *co, const char *s,
 
 	uart_console_write(port, s, count, mvebu_uart_console_putchar);
 
-	wait_for_xmite(port);
+	wait_for_xmitr(port);
 
 	if (ier)
 		writel(ier, port->membase + UART_CTRL(port));
@@ -821,6 +809,9 @@ static int mvebu_uart_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "no registers defined\n");
 		return -EINVAL;
 	}
+
+	if (!match)
+		return -ENODEV;
 
 	/* Assume that all UART ports have a DT alias or none has */
 	id = of_alias_get_id(pdev->dev.of_node, "serial");

@@ -209,9 +209,9 @@ int occ_update_response(struct occ *occ)
 		return rc;
 
 	/* limit the maximum rate of polling the OCC */
-	if (time_after(jiffies, occ->next_update)) {
+	if (time_after(jiffies, occ->last_update + OCC_UPDATE_FREQUENCY)) {
 		rc = occ_poll(occ);
-		occ->next_update = jiffies + OCC_UPDATE_FREQUENCY;
+		occ->last_update = jiffies;
 	} else {
 		rc = occ->last_error;
 	}
@@ -1089,7 +1089,6 @@ int occ_setup(struct occ *occ, const char *name)
 		return rc;
 	}
 
-	occ->next_update = jiffies + OCC_UPDATE_FREQUENCY;
 	occ_parse_poll_response(occ);
 
 	rc = occ_setup_sensor_attrs(occ);

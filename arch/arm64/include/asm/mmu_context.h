@@ -42,11 +42,11 @@ static inline void contextidr_thread_switch(struct task_struct *next)
 }
 
 /*
- * Set TTBR0 to reserved_pg_dir. No translations will be possible via TTBR0.
+ * Set TTBR0 to empty_zero_page. No translations will be possible via TTBR0.
  */
 static inline void cpu_set_reserved_ttbr0(void)
 {
-	unsigned long ttbr = phys_to_ttbr(__pa_symbol(reserved_pg_dir));
+	unsigned long ttbr = phys_to_ttbr(__pa_symbol(empty_zero_page));
 
 	write_sysreg(ttbr, ttbr0_el1);
 	isb();
@@ -69,7 +69,10 @@ extern u64 idmap_ptrs_per_pgd;
 
 static inline bool __cpu_uses_extended_idmap(void)
 {
-	return unlikely(idmap_t0sz != TCR_T0SZ(vabits_actual));
+	if (IS_ENABLED(CONFIG_ARM64_VA_BITS_52))
+		return false;
+
+	return unlikely(idmap_t0sz != TCR_T0SZ(VA_BITS));
 }
 
 /*
@@ -190,9 +193,9 @@ static inline void update_saved_ttbr0(struct task_struct *tsk,
 		return;
 
 	if (mm == &init_mm)
-		ttbr = phys_to_ttbr(__pa_symbol(reserved_pg_dir));
+		ttbr = __pa_symbol(empty_zero_page);
 	else
-		ttbr = phys_to_ttbr(virt_to_phys(mm->pgd)) | ASID(mm) << 48;
+		ttbr = virt_to_phys(mm->pgd) | ASID(mm) << 48;
 
 	WRITE_ONCE(task_thread_info(tsk)->ttbr0, ttbr);
 }

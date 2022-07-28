@@ -1160,11 +1160,9 @@ static int rtw_wx_set_scan(struct net_device *dev, struct iw_request_info *a,
 						break;
 					}
 					sec_len = *(pos++); len -= 1;
-					if (sec_len > 0 &&
-					    sec_len <= len &&
-					    sec_len <= 32) {
+					if (sec_len > 0 && sec_len <= len) {
 						ssid[ssid_index].ssid_length = sec_len;
-						memcpy(ssid[ssid_index].ssid, pos, sec_len);
+						memcpy(ssid[ssid_index].ssid, pos, ssid[ssid_index].ssid_length);
 						ssid_index++;
 					}
 					pos += sec_len;

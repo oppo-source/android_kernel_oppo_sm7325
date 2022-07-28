@@ -647,7 +647,7 @@ s32 igc_config_fc_after_link_up(struct igc_hw *hw)
 	}
 
 out:
-	return ret_val;
+	return 0;
 }
 
 /**

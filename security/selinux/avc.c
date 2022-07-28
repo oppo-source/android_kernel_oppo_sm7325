@@ -30,6 +30,9 @@
 #include "avc.h"
 #include "avc_ss.h"
 #include "classmap.h"
+#ifdef OPLUS_FEATURE_SELINUX_CONTROL_LOG
+#include <soc/oplus/system/proc.h>
+#endif /* OPLUS_FEATURE_SELINUX_CONTROL_LOG */
 
 #define AVC_CACHE_SLOTS			512
 #define AVC_DEF_CACHE_THRESHOLD		512
@@ -295,7 +298,7 @@ static struct avc_xperms_decision_node
 	struct extended_perms_decision *xpd;
 
 	xpd_node = kmem_cache_zalloc(avc_xperms_decision_cachep,
-				     GFP_NOWAIT | __GFP_NOWARN);
+			GFP_NOWAIT | __GFP_NOWARN);
 	if (!xpd_node)
 		return NULL;
 
@@ -343,7 +346,7 @@ static struct avc_xperms_node *avc_xperms_alloc(void)
 	struct avc_xperms_node *xp_node;
 
 	xp_node = kmem_cache_zalloc(avc_xperms_cachep,
-				    GFP_NOWAIT | __GFP_NOWARN);
+			GFP_NOWAIT | __GFP_NOWARN);
 	if (!xp_node)
 		return xp_node;
 	INIT_LIST_HEAD(&xp_node->xpd_head);
@@ -761,6 +764,11 @@ noinline int slow_avc_audit(struct selinux_state *state,
 {
 	struct common_audit_data stack_data;
 	struct selinux_audit_data sad;
+
+#ifdef OPLUS_FEATURE_SELINUX_CONTROL_LOG
+	if (!is_avc_audit_enable())
+		return 0;
+#endif /* OPLUS_FEATURE_SELINUX_CONTROL_LOG */
 
 	if (WARN_ON(!tclass || tclass >= ARRAY_SIZE(secclass_map)))
 		return -EINVAL;

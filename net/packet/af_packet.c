@@ -90,6 +90,7 @@
 #include <net/compat.h>
 
 #include "internal.h"
+#include <trace/hooks/vh_af_packet.h>
 
 /*
    Assumptions:
@@ -235,6 +236,10 @@ struct packet_skb_cb {
 static void __fanout_unlink(struct sock *sk, struct packet_sock *po);
 static void __fanout_link(struct sock *sk, struct packet_sock *po);
 
+//#ifdef OPLUS_FEATURE_DHCP
+int (*handle_dhcp)(struct sock *sk, struct sk_buff *skb, struct net_device *dev, struct packet_type *pt) = NULL;
+EXPORT_SYMBOL(handle_dhcp);
+//#endif /* OPLUS_FEATURE_DHCP */
 static int packet_direct_xmit(struct sk_buff *skb)
 {
 	return dev_direct_xmit(skb, packet_pick_tx_queue(skb));
@@ -2053,6 +2058,7 @@ static int packet_rcv(struct sk_buff *skb, struct net_device *dev,
 	int skb_len = skb->len;
 	unsigned int snaplen, res;
 	bool is_drop_n_account = false;
+	int do_drop = 0;
 
 	if (skb->pkt_type == PACKET_LOOPBACK)
 		goto drop;
@@ -2131,6 +2137,16 @@ static int packet_rcv(struct sk_buff *skb, struct net_device *dev,
 
 	/* drop conntrack reference */
 	nf_reset_ct(skb);
+//#ifdef OPLUS_FEATURE_DHCP
+    if (handle_dhcp != NULL && handle_dhcp(sk, skb, dev, pt)) {
+        printk("drop dhcp offer packet");
+        goto drop;
+    }
+//#endif /* OPLUS_FEATURE_DHCP */
+
+	trace_android_vh_check_dhcp_pkt(sk, skb, dev, pt, &do_drop);
+	if (do_drop)
+		goto drop;
 
 	spin_lock(&sk->sk_receive_queue.lock);
 	po->stats.stats1.tp_packets++;
@@ -2656,7 +2672,7 @@ static int tpacket_snd(struct packet_sock *po, struct msghdr *msg)
 	}
 	if (likely(saddr == NULL)) {
 		dev	= packet_cached_dev_get(po);
-		proto	= READ_ONCE(po->num);
+		proto	= po->num;
 	} else {
 		err = -EINVAL;
 		if (msg->msg_namelen < sizeof(struct sockaddr_ll))
@@ -2869,7 +2885,7 @@ static int packet_snd(struct socket *sock, struct msghdr *msg, size_t len)
 
 	if (likely(saddr == NULL)) {
 		dev	= packet_cached_dev_get(po);
-		proto	= READ_ONCE(po->num);
+		proto	= po->num;
 	} else {
 		err = -EINVAL;
 		if (msg->msg_namelen < sizeof(struct sockaddr_ll))
@@ -3141,7 +3157,7 @@ static int packet_do_bind(struct sock *sk, const char *name, int ifindex,
 			/* prevents packet_notifier() from calling
 			 * register_prot_hook()
 			 */
-			WRITE_ONCE(po->num, 0);
+			po->num = 0;
 			__unregister_prot_hook(sk, true);
 			rcu_read_lock();
 			dev_curr = po->prot_hook.dev;
@@ -3151,17 +3167,17 @@ static int packet_do_bind(struct sock *sk, const char *name, int ifindex,
 		}
 
 		BUG_ON(po->running);
-		WRITE_ONCE(po->num, proto);
+		po->num = proto;
 		po->prot_hook.type = proto;
 
 		if (unlikely(unlisted)) {
 			dev_put(dev);
 			po->prot_hook.dev = NULL;
-			WRITE_ONCE(po->ifindex, -1);
+			po->ifindex = -1;
 			packet_cached_dev_reset(po);
 		} else {
 			po->prot_hook.dev = dev;
-			WRITE_ONCE(po->ifindex, dev ? dev->ifindex : 0);
+			po->ifindex = dev ? dev->ifindex : 0;
 			packet_cached_dev_assign(po, dev);
 		}
 	}
@@ -3475,7 +3491,7 @@ static int packet_getname_spkt(struct socket *sock, struct sockaddr *uaddr,
 	uaddr->sa_family = AF_PACKET;
 	memset(uaddr->sa_data, 0, sizeof(uaddr->sa_data));
 	rcu_read_lock();
-	dev = dev_get_by_index_rcu(sock_net(sk), READ_ONCE(pkt_sk(sk)->ifindex));
+	dev = dev_get_by_index_rcu(sock_net(sk), pkt_sk(sk)->ifindex);
 	if (dev)
 		strlcpy(uaddr->sa_data, dev->name, sizeof(uaddr->sa_data));
 	rcu_read_unlock();
@@ -3490,18 +3506,16 @@ static int packet_getname(struct socket *sock, struct sockaddr *uaddr,
 	struct sock *sk = sock->sk;
 	struct packet_sock *po = pkt_sk(sk);
 	DECLARE_SOCKADDR(struct sockaddr_ll *, sll, uaddr);
-	int ifindex;
 
 	if (peer)
 		return -EOPNOTSUPP;
 
-	ifindex = READ_ONCE(po->ifindex);
 	sll->sll_family = AF_PACKET;
-	sll->sll_ifindex = ifindex;
-	sll->sll_protocol = READ_ONCE(po->num);
+	sll->sll_ifindex = po->ifindex;
+	sll->sll_protocol = po->num;
 	sll->sll_pkttype = 0;
 	rcu_read_lock();
-	dev = dev_get_by_index_rcu(sock_net(sk), ifindex);
+	dev = dev_get_by_index_rcu(sock_net(sk), po->ifindex);
 	if (dev) {
 		sll->sll_hatype = dev->type;
 		sll->sll_halen = dev->addr_len;
@@ -4101,7 +4115,7 @@ static int packet_notifier(struct notifier_block *this,
 				}
 				if (msg == NETDEV_UNREGISTER) {
 					packet_cached_dev_reset(po);
-					WRITE_ONCE(po->ifindex, -1);
+					po->ifindex = -1;
 					if (po->prot_hook.dev)
 						dev_put(po->prot_hook.dev);
 					po->prot_hook.dev = NULL;
@@ -4407,7 +4421,7 @@ static int packet_set_ring(struct sock *sk, union tpacket_req_u *req_u,
 	was_running = po->running;
 	num = po->num;
 	if (was_running) {
-		WRITE_ONCE(po->num, 0);
+		po->num = 0;
 		__unregister_prot_hook(sk, false);
 	}
 	spin_unlock(&po->bind_lock);
@@ -4442,7 +4456,7 @@ static int packet_set_ring(struct sock *sk, union tpacket_req_u *req_u,
 
 	spin_lock(&po->bind_lock);
 	if (was_running) {
-		WRITE_ONCE(po->num, num);
+		po->num = num;
 		register_prot_hook(sk);
 	}
 	spin_unlock(&po->bind_lock);
@@ -4615,8 +4629,8 @@ static int packet_seq_show(struct seq_file *seq, void *v)
 			   s,
 			   refcount_read(&s->sk_refcnt),
 			   s->sk_type,
-			   ntohs(READ_ONCE(po->num)),
-			   READ_ONCE(po->ifindex),
+			   ntohs(po->num),
+			   po->ifindex,
 			   po->running,
 			   atomic_read(&s->sk_rmem_alloc),
 			   from_kuid_munged(seq_user_ns(seq), sock_i_uid(s)),

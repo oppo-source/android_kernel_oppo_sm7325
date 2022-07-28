@@ -636,10 +636,8 @@ int qedr_iw_connect(struct iw_cm_id *cm_id, struct iw_cm_conn_param *conn_param)
 	memcpy(in_params.local_mac_addr, dev->ndev->dev_addr, ETH_ALEN);
 
 	if (test_and_set_bit(QEDR_IWARP_CM_WAIT_FOR_CONNECT,
-			     &qp->iwarp_cm_flags)) {
-		rc = -ENODEV;
+			     &qp->iwarp_cm_flags))
 		goto err; /* QP already being destroyed */
-	}
 
 	rc = dev->ops->iwarp_connect(dev->rdma_ctx, &in_params, &out_params);
 	if (rc) {

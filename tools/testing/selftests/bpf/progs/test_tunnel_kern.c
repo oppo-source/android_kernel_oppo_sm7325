@@ -446,8 +446,10 @@ int _geneve_get_tunnel(struct __sk_buff *skb)
 	}
 
 	ret = bpf_skb_get_tunnel_opt(skb, &gopt, sizeof(gopt));
-	if (ret < 0)
-		gopt.opt_class = 0;
+	if (ret < 0) {
+		ERROR(ret);
+		return TC_ACT_SHOT;
+	}
 
 	bpf_trace_printk(fmt, sizeof(fmt),
 			key.tunnel_id, key.remote_ipv4, gopt.opt_class);
@@ -508,8 +510,10 @@ int _ip6geneve_get_tunnel(struct __sk_buff *skb)
 	}
 
 	ret = bpf_skb_get_tunnel_opt(skb, &gopt, sizeof(gopt));
-	if (ret < 0)
-		gopt.opt_class = 0;
+	if (ret < 0) {
+		ERROR(ret);
+		return TC_ACT_SHOT;
+	}
 
 	bpf_trace_printk(fmt, sizeof(fmt),
 			key.tunnel_id, key.remote_ipv4, gopt.opt_class);

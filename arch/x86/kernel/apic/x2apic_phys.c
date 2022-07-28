@@ -43,8 +43,7 @@ static void x2apic_send_IPI(int cpu, int vector)
 {
 	u32 dest = per_cpu(x86_cpu_to_apicid, cpu);
 
-	/* x2apic MSRs are special and need a special fence: */
-	weak_wrmsr_fence();
+	x2apic_wrmsr_fence();
 	__x2apic_send_IPI_dest(dest, vector, APIC_DEST_PHYSICAL);
 }
 
@@ -55,8 +54,7 @@ __x2apic_send_IPI_mask(const struct cpumask *mask, int vector, int apic_dest)
 	unsigned long this_cpu;
 	unsigned long flags;
 
-	/* x2apic MSRs are special and need a special fence: */
-	weak_wrmsr_fence();
+	x2apic_wrmsr_fence();
 
 	local_irq_save(flags);
 
@@ -127,8 +125,7 @@ void __x2apic_send_IPI_shorthand(int vector, u32 which)
 {
 	unsigned long cfg = __prepare_ICR(which, vector, 0);
 
-	/* x2apic MSRs are special and need a special fence: */
-	weak_wrmsr_fence();
+	x2apic_wrmsr_fence();
 	native_x2apic_icr_write(cfg, 0);
 }
 

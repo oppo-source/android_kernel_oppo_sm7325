@@ -1065,7 +1065,7 @@ out:
 
 /* rtnl */
 /* remove all nexthops tied to a device being deleted */
-static void nexthop_flush_dev(struct net_device *dev, unsigned long event)
+static void nexthop_flush_dev(struct net_device *dev)
 {
 	unsigned int hash = nh_dev_hashfn(dev->ifindex);
 	struct net *net = dev_net(dev);
@@ -1075,10 +1075,6 @@ static void nexthop_flush_dev(struct net_device *dev, unsigned long event)
 
 	hlist_for_each_entry_safe(nhi, n, head, dev_hash) {
 		if (nhi->fib_nhc.nhc_dev != dev)
-			continue;
-
-		if (nhi->reject_nh &&
-		    (event == NETDEV_DOWN || event == NETDEV_CHANGE))
 			continue;
 
 		remove_nexthop(net, nhi->nh_parent, NULL);
@@ -1161,10 +1157,8 @@ static struct nexthop *nexthop_create_group(struct net *net,
 	return nh;
 
 out_no_nh:
-	for (i--; i >= 0; --i) {
-		list_del(&nhg->nh_entries[i].nh_list);
+	for (; i >= 0; --i)
 		nexthop_put(nhg->nh_entries[i].nh);
-	}
 
 	kfree(nhg->spare);
 	kfree(nhg);
@@ -1798,11 +1792,11 @@ static int nh_netdev_event(struct notifier_block *this,
 	switch (event) {
 	case NETDEV_DOWN:
 	case NETDEV_UNREGISTER:
-		nexthop_flush_dev(dev, event);
+		nexthop_flush_dev(dev);
 		break;
 	case NETDEV_CHANGE:
 		if (!(dev_get_flags(dev) & (IFF_RUNNING | IFF_LOWER_UP)))
-			nexthop_flush_dev(dev, event);
+			nexthop_flush_dev(dev);
 		break;
 	case NETDEV_CHANGEMTU:
 		info_ext = ptr;

@@ -281,7 +281,6 @@ int sctp_raw_to_bind_addrs(struct sctp_bind_addr *bp, __u8 *raw_addr_list,
 		retval = sctp_add_bind_addr(bp, &addr, sizeof(addr),
 					    SCTP_ADDR_SRC, gfp);
 		if (retval)
-			/* Can't finish building the list, clean up. */
 			goto out_err;
 
 next:

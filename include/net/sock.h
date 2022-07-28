@@ -184,6 +184,16 @@ struct sock_common {
 	struct proto		*skc_prot;
 	possible_net_t		skc_net;
 
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_WIFI_SLA)
+	u32 skc_oppo_mark;
+#endif /* CONFIG_OPLUS_FEATURE_WIFI_SLA */
+
+	#if IS_ENABLED(CONFIG_OPLUS_FEATURE_NWPOWER)
+	u32 skc_oplus_pid;
+	u64 skc_oplus_last_rcv_stamp[2];//index 0 = last, index 1 = now
+	u64 skc_oplus_last_send_stamp[2];//index 0 = last, index 1 = now
+	#endif /* CONFIG_OPLUS_FEATURE_NWPOWER */
+
 #if IS_ENABLED(CONFIG_IPV6)
 	struct in6_addr		skc_v6_daddr;
 	struct in6_addr		skc_v6_rcv_saddr;
@@ -362,6 +372,16 @@ struct sock {
 #define sk_incoming_cpu		__sk_common.skc_incoming_cpu
 #define sk_flags		__sk_common.skc_flags
 #define sk_rxhash		__sk_common.skc_rxhash
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_WIFI_SLA)
+#define oppo_sla_mark   __sk_common.skc_oppo_mark
+#endif /* CONFIG_OPLUS_FEATURE_WIFI_SLA */
+
+
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_NWPOWER)
+#define sk_oplus_pid				__sk_common.skc_oplus_pid
+#define oplus_last_rcv_stamp		__sk_common.skc_oplus_last_rcv_stamp
+#define oplus_last_send_stamp	__sk_common.skc_oplus_last_send_stamp
+#endif /* CONFIG_OPLUS_FEATURE_NWPOWER */
 
 	socket_lock_t		sk_lock;
 	atomic_t		sk_drops;
@@ -1873,8 +1893,7 @@ static inline u32 net_tx_rndhash(void)
 
 static inline void sk_set_txhash(struct sock *sk)
 {
-	/* This pairs with READ_ONCE() in skb_set_hash_from_sk() */
-	WRITE_ONCE(sk->sk_txhash, net_tx_rndhash());
+	sk->sk_txhash = net_tx_rndhash();
 }
 
 static inline void sk_rethink_txhash(struct sock *sk)
@@ -1968,6 +1987,9 @@ static inline void sk_dst_confirm(struct sock *sk)
 
 static inline void sock_confirm_neigh(struct sk_buff *skb, struct neighbour *n)
 {
+#if !IS_ENABLED(CONFIG_OPLUS_BUG_STABILITY)
+/* Remove for [1357567],some AP doesn't send arp when it needs to send data to DUT */
+/* We remove this code to send arp more frequently to notify our mac to AP */
 	if (skb_get_dst_pending_confirm(skb)) {
 		struct sock *sk = skb->sk;
 		unsigned long now = jiffies;
@@ -1978,6 +2000,7 @@ static inline void sock_confirm_neigh(struct sk_buff *skb, struct neighbour *n)
 		if (sk && READ_ONCE(sk->sk_dst_pending_confirm))
 			WRITE_ONCE(sk->sk_dst_pending_confirm, 0);
 	}
+#endif /* CONFIG_OPLUS_BUG_STABILITY */
 }
 
 bool sk_mc_loop(struct sock *sk);
@@ -2139,12 +2162,9 @@ static inline void sock_poll_wait(struct file *filp, struct socket *sock,
 
 static inline void skb_set_hash_from_sk(struct sk_buff *skb, struct sock *sk)
 {
-	/* This pairs with WRITE_ONCE() in sk_set_txhash() */
-	u32 txhash = READ_ONCE(sk->sk_txhash);
-
-	if (txhash) {
+	if (sk->sk_txhash) {
 		skb->l4_hash = 1;
-		skb->hash = txhash;
+		skb->hash = sk->sk_txhash;
 	}
 }
 
@@ -2165,17 +2185,6 @@ static inline void skb_set_owner_r(struct sk_buff *skb, struct sock *sk)
 	skb->destructor = sock_rfree;
 	atomic_add(skb->truesize, &sk->sk_rmem_alloc);
 	sk_mem_charge(sk, skb->truesize);
-}
-
-static inline __must_check bool skb_set_owner_sk_safe(struct sk_buff *skb, struct sock *sk)
-{
-	if (sk && refcount_inc_not_zero(&sk->sk_refcnt)) {
-		skb_orphan(skb);
-		skb->destructor = sock_efree;
-		skb->sk = sk;
-		return true;
-	}
-	return false;
 }
 
 void sk_reset_timer(struct sock *sk, struct timer_list *timer,

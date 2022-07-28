@@ -443,7 +443,6 @@ static struct pci_driver hl_pci_driver = {
 	.id_table = ids,
 	.probe = hl_pci_probe,
 	.remove = hl_pci_remove,
-	.shutdown = hl_pci_remove,
 	.driver.pm = &hl_pm_ops,
 };
 

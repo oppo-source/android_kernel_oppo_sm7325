@@ -23,6 +23,11 @@
 #include <linux/memblock.h>
 
 #define MAX_RESERVED_REGIONS	64
+
+#ifdef CONFIG_OPLUS_FEATURE_LOWMEM_DBG
+static unsigned long reserved_mem_size;
+#endif /* CONFIG_OPLUS_FEATURE_LOWMEM_DBG */
+
 static struct reserved_mem reserved_mem[MAX_RESERVED_REGIONS];
 static int reserved_mem_count;
 
@@ -134,9 +139,9 @@ static int __init __reserved_mem_alloc_size(unsigned long node,
 			ret = early_init_dt_alloc_reserved_memory_arch(size,
 					align, start, end, nomap, &base);
 			if (ret == 0) {
-				pr_debug("allocated memory for '%s' node: base %pa, size %lu MiB\n",
+				pr_debug("allocated memory for '%s' node: base %pa, size %ld MiB\n",
 					uname, &base,
-					(unsigned long)(size / SZ_1M));
+					(unsigned long)size / SZ_1M);
 				break;
 			}
 			len -= t_len;
@@ -146,8 +151,8 @@ static int __init __reserved_mem_alloc_size(unsigned long node,
 		ret = early_init_dt_alloc_reserved_memory_arch(size, align,
 							0, 0, nomap, &base);
 		if (ret == 0)
-			pr_debug("allocated memory for '%s' node: base %pa, size %lu MiB\n",
-				uname, &base, (unsigned long)(size / SZ_1M));
+			pr_debug("allocated memory for '%s' node: base %pa, size %ld MiB\n",
+				uname, &base, (unsigned long)size / SZ_1M);
 	}
 
 	if (base == 0) {
@@ -278,6 +283,9 @@ void __init fdt_init_reserved_mem(void)
 					memblock_add(rmem->base, rmem->size);
 			}
 		}
+#ifdef CONFIG_OPLUS_FEATURE_LOWMEM_DBG
+		reserved_mem_size += rmem->size;
+#endif /* CONFIG_OPLUS_FEATURE_LOWMEM_DBG */
 	}
 }
 
@@ -365,6 +373,13 @@ int of_reserved_mem_device_init_by_idx(struct device *dev,
 	return ret;
 }
 EXPORT_SYMBOL_GPL(of_reserved_mem_device_init_by_idx);
+
+#ifdef CONFIG_OPLUS_FEATURE_LOWMEM_DBG
+unsigned long dt_memory_reserved_pages(void)
+{
+	return reserved_mem_size >> PAGE_SHIFT;
+}
+#endif /* CONFIG_OPLUS_FEATURE_LOWMEM_DBG */
 
 /**
  * of_reserved_mem_device_release() - release reserved memory device structures

@@ -262,20 +262,21 @@ static void node_init_cache_dev(struct node *node)
 	if (!dev)
 		return;
 
-	device_initialize(dev);
 	dev->parent = &node->dev;
 	dev->release = node_cache_release;
 	if (dev_set_name(dev, "memory_side_cache"))
-		goto put_device;
+		goto free_dev;
 
-	if (device_add(dev))
-		goto put_device;
+	if (device_register(dev))
+		goto free_name;
 
 	pm_runtime_no_callbacks(dev);
 	node->cache_dev = dev;
 	return;
-put_device:
-	put_device(dev);
+free_name:
+	kfree_const(dev->kobj.name);
+free_dev:
+	kfree(dev);
 }
 
 /**
@@ -312,24 +313,25 @@ void node_add_cache(unsigned int nid, struct node_cache_attrs *cache_attrs)
 		return;
 
 	dev = &info->dev;
-	device_initialize(dev);
 	dev->parent = node->cache_dev;
 	dev->release = node_cacheinfo_release;
 	dev->groups = cache_groups;
 	if (dev_set_name(dev, "index%d", cache_attrs->level))
-		goto put_device;
+		goto free_cache;
 
 	info->cache_attrs = *cache_attrs;
-	if (device_add(dev)) {
+	if (device_register(dev)) {
 		dev_warn(&node->dev, "failed to add cache level:%d\n",
 			 cache_attrs->level);
-		goto put_device;
+		goto free_name;
 	}
 	pm_runtime_no_callbacks(dev);
 	list_add_tail(&info->node, &node->cache_attrs);
 	return;
-put_device:
-	put_device(dev);
+free_name:
+	kfree_const(dev->kobj.name);
+free_cache:
+	kfree(info);
 }
 
 static void node_remove_caches(struct node *node)

@@ -1043,7 +1043,7 @@ int udp_sendmsg(struct sock *sk, struct msghdr *msg, size_t len)
 	}
 
 	ipcm_init_sk(&ipc, inet);
-	ipc.gso_size = READ_ONCE(up->gso_size);
+	ipc.gso_size = up->gso_size;
 
 	if (msg->msg_controllen) {
 		err = udp_cmsg_send(sk, msg, &ipc.gso_size);
@@ -2495,8 +2495,7 @@ int udp_v4_early_demux(struct sk_buff *skb)
 		 */
 		if (!inet_sk(sk)->inet_daddr && in_dev)
 			return ip_mc_validate_source(skb, iph->daddr,
-						     iph->saddr,
-						     iph->tos & IPTOS_RT_MASK,
+						     iph->saddr, iph->tos,
 						     skb->dev, in_dev, &itag);
 	}
 	return 0;
@@ -2590,17 +2589,14 @@ int udp_lib_setsockopt(struct sock *sk, int level, int optname,
 	case UDP_SEGMENT:
 		if (val < 0 || val > USHRT_MAX)
 			return -EINVAL;
-		WRITE_ONCE(up->gso_size, val);
+		up->gso_size = val;
 		break;
 
 	case UDP_GRO:
 		lock_sock(sk);
-
-		/* when enabling GRO, accept the related GSO packet type */
 		if (valbool)
 			udp_tunnel_encap_enable(sk->sk_socket);
 		up->gro_enabled = valbool;
-		up->accept_udp_l4 = valbool;
 		release_sock(sk);
 		break;
 
@@ -2695,11 +2691,7 @@ int udp_lib_getsockopt(struct sock *sk, int level, int optname,
 		break;
 
 	case UDP_SEGMENT:
-		val = READ_ONCE(up->gso_size);
-		break;
-
-	case UDP_GRO:
-		val = up->gro_enabled;
+		val = up->gso_size;
 		break;
 
 	/* The following two cannot be changed on UDP sockets, the return is

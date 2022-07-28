@@ -16,8 +16,6 @@
 
 /* Keep everyone on toes */
 #define USB_XFERS	8
-/* UAC2 spec: 4.1 Audio Channel Cluster Descriptor */
-#define UAC2_CHANNEL_MASK 0x07FFFFFF
 
 /*
  * The driver implements a simple UAC_2 topology.
@@ -276,7 +274,7 @@ static struct usb_endpoint_descriptor fs_epout_desc = {
 
 	.bEndpointAddress = USB_DIR_OUT,
 	.bmAttributes = USB_ENDPOINT_XFER_ISOC | USB_ENDPOINT_SYNC_SYNC,
-	/* .wMaxPacketSize = DYNAMIC */
+	.wMaxPacketSize = cpu_to_le16(1023),
 	.bInterval = 1,
 };
 
@@ -285,7 +283,7 @@ static struct usb_endpoint_descriptor hs_epout_desc = {
 	.bDescriptorType = USB_DT_ENDPOINT,
 
 	.bmAttributes = USB_ENDPOINT_XFER_ISOC | USB_ENDPOINT_SYNC_SYNC,
-	/* .wMaxPacketSize = DYNAMIC */
+	.wMaxPacketSize = cpu_to_le16(1024),
 	.bInterval = 4,
 };
 
@@ -360,7 +358,7 @@ static struct usb_endpoint_descriptor fs_epin_desc = {
 
 	.bEndpointAddress = USB_DIR_IN,
 	.bmAttributes = USB_ENDPOINT_XFER_ISOC | USB_ENDPOINT_SYNC_SYNC,
-	/* .wMaxPacketSize = DYNAMIC */
+	.wMaxPacketSize = cpu_to_le16(1023),
 	.bInterval = 1,
 };
 
@@ -369,7 +367,7 @@ static struct usb_endpoint_descriptor hs_epin_desc = {
 	.bDescriptorType = USB_DT_ENDPOINT,
 
 	.bmAttributes = USB_ENDPOINT_XFER_ISOC | USB_ENDPOINT_SYNC_SYNC,
-	/* .wMaxPacketSize = DYNAMIC */
+	.wMaxPacketSize = cpu_to_le16(1024),
 	.bInterval = 4,
 };
 
@@ -495,28 +493,12 @@ struct cntrl_range_lay3 {
 	__le32	dRES;
 } __packed;
 
-static int set_ep_max_packet_size(const struct f_uac2_opts *uac2_opts,
+static void set_ep_max_packet_size(const struct f_uac2_opts *uac2_opts,
 	struct usb_endpoint_descriptor *ep_desc,
-	enum usb_device_speed speed, bool is_playback)
+	unsigned int factor, bool is_playback)
 {
 	int chmask, srate, ssize;
-	u16 max_size_bw, max_size_ep;
-	unsigned int factor;
-
-	switch (speed) {
-	case USB_SPEED_FULL:
-		max_size_ep = 1023;
-		factor = 1000;
-		break;
-
-	case USB_SPEED_HIGH:
-		max_size_ep = 1024;
-		factor = 8000;
-		break;
-
-	default:
-		return -EINVAL;
-	}
+	u16 max_packet_size;
 
 	if (is_playback) {
 		chmask = uac2_opts->p_chmask;
@@ -528,12 +510,10 @@ static int set_ep_max_packet_size(const struct f_uac2_opts *uac2_opts,
 		ssize = uac2_opts->c_ssize;
 	}
 
-	max_size_bw = num_channels(chmask) * ssize *
-		((srate / (factor / (1 << (ep_desc->bInterval - 1)))) + 1);
-	ep_desc->wMaxPacketSize = cpu_to_le16(min_t(u16, max_size_bw,
-						    max_size_ep));
-
-	return 0;
+	max_packet_size = num_channels(chmask) * ssize *
+		DIV_ROUND_UP(srate, factor / (1 << (ep_desc->bInterval - 1)));
+	ep_desc->wMaxPacketSize = cpu_to_le16(min_t(u16, max_packet_size,
+				le16_to_cpu(ep_desc->wMaxPacketSize)));
 }
 
 /* Use macro to overcome line length limitation */
@@ -690,36 +670,6 @@ static void setup_descriptor(struct f_uac2_opts *opts)
 	ss_audio_desc[i] = NULL;
 }
 
-static int afunc_validate_opts(struct g_audio *agdev, struct device *dev)
-{
-	struct f_uac2_opts *opts = g_audio_to_uac2_opts(agdev);
-
-	if (!opts->p_chmask && !opts->c_chmask) {
-		dev_err(dev, "Error: no playback and capture channels\n");
-		return -EINVAL;
-	} else if (opts->p_chmask & ~UAC2_CHANNEL_MASK) {
-		dev_err(dev, "Error: unsupported playback channels mask\n");
-		return -EINVAL;
-	} else if (opts->c_chmask & ~UAC2_CHANNEL_MASK) {
-		dev_err(dev, "Error: unsupported capture channels mask\n");
-		return -EINVAL;
-	} else if ((opts->p_ssize < 1) || (opts->p_ssize > 4)) {
-		dev_err(dev, "Error: incorrect playback sample size\n");
-		return -EINVAL;
-	} else if ((opts->c_ssize < 1) || (opts->c_ssize > 4)) {
-		dev_err(dev, "Error: incorrect capture sample size\n");
-		return -EINVAL;
-	} else if (!opts->p_srate) {
-		dev_err(dev, "Error: incorrect playback sampling rate\n");
-		return -EINVAL;
-	} else if (!opts->c_srate) {
-		dev_err(dev, "Error: incorrect capture sampling rate\n");
-		return -EINVAL;
-	}
-
-	return 0;
-}
-
 static int
 afunc_bind(struct usb_configuration *cfg, struct usb_function *fn)
 {
@@ -728,13 +678,11 @@ afunc_bind(struct usb_configuration *cfg, struct usb_function *fn)
 	struct usb_composite_dev *cdev = cfg->cdev;
 	struct usb_gadget *gadget = cdev->gadget;
 	struct device *dev = &gadget->dev;
-	struct f_uac2_opts *uac2_opts = g_audio_to_uac2_opts(agdev);
+	struct f_uac2_opts *uac2_opts;
 	struct usb_string *us;
 	int ret;
 
-	ret = afunc_validate_opts(agdev, dev);
-	if (ret)
-		return ret;
+	uac2_opts = container_of(fn->fi, struct f_uac2_opts, func_inst);
 
 	us = usb_gstrings_attach(cdev, fn_strings, ARRAY_SIZE(strings_fn));
 	if (IS_ERR(us))
@@ -806,33 +754,10 @@ afunc_bind(struct usb_configuration *cfg, struct usb_function *fn)
 	}
 
 	/* Calculate wMaxPacketSize according to audio bandwidth */
-	ret = set_ep_max_packet_size(uac2_opts, &fs_epin_desc, USB_SPEED_FULL,
-				     true);
-	if (ret < 0) {
-		dev_err(dev, "%s:%d Error!\n", __func__, __LINE__);
-		return ret;
-	}
-
-	ret = set_ep_max_packet_size(uac2_opts, &fs_epout_desc, USB_SPEED_FULL,
-				     false);
-	if (ret < 0) {
-		dev_err(dev, "%s:%d Error!\n", __func__, __LINE__);
-		return ret;
-	}
-
-	ret = set_ep_max_packet_size(uac2_opts, &hs_epin_desc, USB_SPEED_HIGH,
-				     true);
-	if (ret < 0) {
-		dev_err(dev, "%s:%d Error!\n", __func__, __LINE__);
-		return ret;
-	}
-
-	ret = set_ep_max_packet_size(uac2_opts, &hs_epout_desc, USB_SPEED_HIGH,
-				     false);
-	if (ret < 0) {
-		dev_err(dev, "%s:%d Error!\n", __func__, __LINE__);
-		return ret;
-	}
+	set_ep_max_packet_size(uac2_opts, &fs_epin_desc, 1000, true);
+	set_ep_max_packet_size(uac2_opts, &fs_epout_desc, 1000, false);
+	set_ep_max_packet_size(uac2_opts, &hs_epin_desc, 8000, true);
+	set_ep_max_packet_size(uac2_opts, &hs_epout_desc, 8000, false);
 
 	if (EPOUT_EN(uac2_opts)) {
 		agdev->out_ep = usb_ep_autoconfig(gadget, &fs_epout_desc);

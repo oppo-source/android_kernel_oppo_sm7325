@@ -134,7 +134,7 @@ static struct {
 
 static int siw_init_cpulist(void)
 {
-	int i, num_nodes = nr_node_ids;
+	int i, num_nodes = num_possible_nodes();
 
 	memset(siw_tx_thread, 0, sizeof(siw_tx_thread));
 

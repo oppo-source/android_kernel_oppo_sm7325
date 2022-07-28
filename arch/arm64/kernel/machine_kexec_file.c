@@ -182,10 +182,8 @@ static int create_dtb(struct kimage *image,
 
 		/* duplicate a device tree blob */
 		ret = fdt_open_into(initial_boot_params, buf, buf_size);
-		if (ret) {
-			vfree(buf);
+		if (ret)
 			return -EINVAL;
-		}
 
 		ret = setup_dtb(image, initrd_load_addr, initrd_len,
 				cmdline, buf);

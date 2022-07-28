@@ -1,8 +1,14 @@
 /* SPDX-License-Identifier: GPL-2.0 WITH Linux-syscall-note */
+/*
+* Copyright (C) 2007-2008 Google. All rights reserved
+* Copyright (C) 2020 Oplus. All rights reserved.
+*/
+
 #ifndef _UAPI__LINUX_NETLINK_H
 #define _UAPI__LINUX_NETLINK_H
+#define OPLUS_FEATURE_WIFI_LUCKYMONEY
 
-#include <linux/const.h>
+#include <linux/kernel.h>
 #include <linux/socket.h> /* for __kernel_sa_family_t */
 #include <linux/types.h>
 
@@ -32,7 +38,43 @@
 
 #define NETLINK_INET_DIAG	NETLINK_SOCK_DIAG
 
-#define MAX_LINKS 32		
+/* #if defined(OPLUS_FEATURE_HANS_FREEZE) && defined(CONFIG_OPLUS_FEATURE_HANS) */
+#define NETLINK_OPLUS_HANS       28      /* Socket for freezing solution */
+/* #endif */ /*OPLUS_FEATURE_HANS_FREEZE*/
+
+/* #ifdef OPLUS_FEATURE_WIFI_SLA */
+#define NETLINK_OPPO_SLA  33      /*SLA NETLINK SOCK*/
+/* #endif */ /* OPLUS_FEATURE_WIFI_SLA */
+
+/* Apps monitor NETLINK SOCK */
+/*#ifdef CONFIG_OPLUS_FEATURE_APP_MONITOR*/
+#define NETLINK_OPLUS_APPS_MONITOR  35
+/*#endif*/ /* CONFIG_OPLUS_FEATURE_APP_MONITOR */
+
+/* #ifdef  OPLUS_FEATURE_DATA_EVAL */
+#define NETLINK_OPLUS_KERNEL2USER  37      /* kernel data info to user space */
+/* #endif */ /* OPLUS_FEATURE_DATA_EVAL */
+
+/* #ifdef OPLUS_FEATURE_WIFI_CAPCENTER */
+#define NETLINK_OPLUS_WIFI_CAP_CENTER_SYNC 39
+#define NETLINK_OPLUS_WIFI_CAP_CENTER_ASYNC 40
+
+/* #define OPLUS_NETLINK_MM_KEVENT 41  (defined in oplus_mm_kevent.h file) */
+
+/* #ifdef OPLUS_FEATURE_IPV6_OPTIMIZE */
+#define NETLINK_OPLUS_IPV6_RTO  42
+/* #endif */ /* OPLUS_FEATURE_IPV6_OPTIMIZE */
+
+/* #ifdef OPLUS_FEATURE_THEIA */
+/* should match with oppo_theia/include/TheiaKeventThread.h define */
+#define OPLUS_NETLINK_THEIA_KEVENT 43
+/* #endif */ /* OPLUS_FEATURE_THEIA */
+
+/* #ifdef OPLUS_FEATURE_WIFI_SMARTANTENNA */
+#define NETLINK_OPLUS_WSA 44
+/* #endif */ /* OPLUS_FEATURE_WIFI_SMARTANTENNA */
+
+#define MAX_LINKS 45
 
 struct sockaddr_nl {
 	__kernel_sa_family_t	nl_family;	/* AF_NETLINK	*/

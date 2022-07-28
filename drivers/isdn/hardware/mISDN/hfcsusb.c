@@ -46,7 +46,7 @@ static void hfcsusb_start_endpoint(struct hfcsusb *hw, int channel);
 static void hfcsusb_stop_endpoint(struct hfcsusb *hw, int channel);
 static int  hfcsusb_setup_bch(struct bchannel *bch, int protocol);
 static void deactivate_bchannel(struct bchannel *bch);
-static int  hfcsusb_ph_info(struct hfcsusb *hw);
+static void hfcsusb_ph_info(struct hfcsusb *hw);
 
 /* start next background transfer for control channel */
 static void
@@ -241,7 +241,7 @@ hfcusb_l2l1B(struct mISDNchannel *ch, struct sk_buff *skb)
  * send full D/B channel status information
  * as MPH_INFORMATION_IND
  */
-static int
+static void
 hfcsusb_ph_info(struct hfcsusb *hw)
 {
 	struct ph_info *phi;
@@ -250,7 +250,7 @@ hfcsusb_ph_info(struct hfcsusb *hw)
 
 	phi = kzalloc(struct_size(phi, bch, dch->dev.nrbchan), GFP_ATOMIC);
 	if (!phi)
-		return -ENOMEM;
+		return;
 
 	phi->dch.ch.protocol = hw->protocol;
 	phi->dch.ch.Flags = dch->Flags;
@@ -264,8 +264,6 @@ hfcsusb_ph_info(struct hfcsusb *hw)
 		    sizeof(struct ph_info_dch) + dch->dev.nrbchan *
 		    sizeof(struct ph_info_ch), phi, GFP_ATOMIC);
 	kfree(phi);
-
-	return 0;
 }
 
 /*
@@ -350,7 +348,8 @@ hfcusb_l2l1D(struct mISDNchannel *ch, struct sk_buff *skb)
 			ret = l1_event(dch->l1, hh->prim);
 		break;
 	case MPH_INFORMATION_REQ:
-		ret = hfcsusb_ph_info(hw);
+		hfcsusb_ph_info(hw);
+		ret = 0;
 		break;
 	}
 
@@ -405,7 +404,8 @@ hfc_l1callback(struct dchannel *dch, u_int cmd)
 			       hw->name, __func__, cmd);
 		return -1;
 	}
-	return hfcsusb_ph_info(hw);
+	hfcsusb_ph_info(hw);
+	return 0;
 }
 
 static int
@@ -747,7 +747,8 @@ hfcsusb_setup_bch(struct bchannel *bch, int protocol)
 			handle_led(hw, (bch->nr == 1) ? LED_B1_OFF :
 				   LED_B2_OFF);
 	}
-	return hfcsusb_ph_info(hw);
+	hfcsusb_ph_info(hw);
+	return 0;
 }
 
 static void
