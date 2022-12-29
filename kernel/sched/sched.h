@@ -2,6 +2,9 @@
 /*
  * Scheduler internal types and methods:
  */
+#ifndef __KERNEL_SCHED_H__
+#define __KERNEL_SCHED_H__
+
 #include <linux/sched.h>
 
 #include <linux/sched/autogroup.h>
@@ -124,6 +127,12 @@ struct walt_task_group {
 	bool colocate;
 	/* Controls whether further updates are allowed to the colocate flag */
 	bool colocate_update_disabled;
+#ifdef OPLUS_FEATURE_POWER_EFFICIENCY
+	unsigned int window_policy;
+	bool discount_wait_time;
+	bool top_task_filter;
+	bool ed_task_filter;
+#endif
 };
 
 struct walt_root_domain {
@@ -205,6 +214,12 @@ extern cpumask_t asym_cap_sibling_cpus;
 /* task_struct::on_rq states: */
 #define TASK_ON_RQ_QUEUED	1
 #define TASK_ON_RQ_MIGRATING	2
+
+#if defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST)
+#ifdef CONFIG_MMAP_LOCK_OPT
+extern int sysctl_uxchain_v2;
+#endif
+#endif
 
 extern __read_mostly int scheduler_running;
 
@@ -1152,6 +1167,13 @@ struct rq {
 #ifdef CONFIG_SCHED_WALT
 	int			idle_state_idx;
 #endif
+#endif
+#if defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST)
+	struct list_head ux_thread_list;
+#endif /* defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST) */
+#ifdef CONFIG_LOCKING_PROTECT
+	int rq_locking_task;
+	struct list_head locking_thread_list;
 #endif
 };
 
@@ -2234,10 +2256,15 @@ static inline unsigned long capacity_orig_of(int cpu)
 {
 	return cpu_rq(cpu)->cpu_capacity_orig;
 }
-
+#if defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST)
+extern void sf_task_util_record(struct task_struct *p);
+#endif
 static inline unsigned long task_util(struct task_struct *p)
 {
 #ifdef CONFIG_SCHED_WALT
+#if defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST)
+	sf_task_util_record(p);
+#endif
 	return p->wts.demand_scaled;
 #endif
 	return READ_ONCE(p->se.avg.util_avg);
@@ -3441,4 +3468,6 @@ static inline void walt_irq_work_queue(struct irq_work *work)
 {
 	irq_work_queue(work);
 }
+#endif
+
 #endif

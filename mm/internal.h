@@ -35,7 +35,11 @@
 void page_writeback_init(void);
 
 vm_fault_t do_swap_page(struct vm_fault *vmf);
-
+#ifdef CONFIG_KSHRINK_SLABD
+extern bool wakeup_shrink_slabd(gfp_t gfp_mask, int nid,
+				 struct mem_cgroup *memcg,
+				 int priority, struct reclaim_state *reclaim_state);
+#endif
 #ifdef CONFIG_SPECULATIVE_PAGE_FAULT
 extern struct vm_area_struct *get_vma(struct mm_struct *mm,
 				      unsigned long addr);
@@ -617,4 +621,13 @@ static inline bool is_migrate_highatomic_page(struct page *page)
 
 void setup_zone_pageset(struct zone *zone);
 extern struct page *alloc_new_node_page(struct page *page, unsigned long node);
+
+#ifdef CONFIG_KSHRINK_LRUVECD
+extern bool wakeup_kshrink_lruvecd(struct list_head *page_list);
+extern void setpage_reclaim_trylock(struct page *page);
+extern void clearpage_reclaim_trylock(struct page *page);
+extern bool page_reclaim_trylock_fail(struct page *page);
+extern bool reclaim_page_trylock(struct page *page, struct rw_semaphore *sem,
+				bool *got_lock);
+#endif /* CONFIG_KSHRINK_LRUVECD */
 #endif	/* __MM_INTERNAL_H */

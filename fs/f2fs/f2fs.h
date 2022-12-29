@@ -28,6 +28,12 @@
 #include <linux/fscrypt.h>
 #include <linux/fsverity.h>
 
+#ifdef OPLUS_FEATURE_UFSPLUS
+#ifdef CONFIG_FS_HPB
+#include <linux/fs_hpb.h>
+#endif
+#endif /* OPLUS_FEATURE_UFSPLUS */
+
 #ifdef CONFIG_F2FS_CHECK_FS
 #define f2fs_bug_on(sbi, condition)	BUG_ON(condition)
 #else
@@ -761,6 +767,11 @@ enum {
 	FI_VERITY_IN_PROGRESS,	/* building fs-verity Merkle tree */
 	FI_COMPRESSED_FILE,	/* indicate file's data can be compressed */
 	FI_MMAP_FILE,		/* indicate file was mmapped */
+#ifdef OPLUS_FEATURE_UFSPLUS
+#ifdef CONFIG_FS_HPB
+	FI_HPB_INODE,           /* HPB */
+#endif
+#endif /* OPLUS_FEATURE_UFSPLUS */
 	FI_MAX,			/* max flag, never be used */
 };
 
@@ -1191,6 +1202,7 @@ struct f2fs_io_info {
 	bool retry;		/* need to reallocate block address */
 	int compr_blocks;	/* # of compressed block addresses */
 	bool encrypted;		/* indicate file is encrypted */
+	bool post_read;		/* require post read */
 	enum iostat_type io_type;	/* io type */
 	struct writeback_control *io_wbc; /* writeback control */
 	struct bio **bio;		/* bio for ipu */

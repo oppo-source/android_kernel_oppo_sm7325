@@ -14,6 +14,9 @@
 #include <linux/regmap.h>
 #include <linux/workqueue.h>
 
+#undef pr_debug
+#define pr_debug pr_err
+
 /* Vibrator-LDO register definitions */
 #define QPNP_VIB_LDO_REG_STATUS1	0x08
 #define QPNP_VIB_LDO_VREG_READY		BIT(7)
@@ -32,7 +35,10 @@
  * Define vibration periods: default(5sec), min(50ms), max(15sec) and
  * overdrive(30ms).
  */
-#define QPNP_VIB_MIN_PLAY_MS		50
+
+#ifdef OPLUS_FEATURE_CHG_BASIC
+#define QPNP_VIB_MIN_PLAY_MS		35
+#endif
 #define QPNP_VIB_PLAY_MS		5000
 #define QPNP_VIB_MAX_PLAY_MS		15000
 #define QPNP_VIB_OVERDRIVE_PLAY_MS	30
@@ -198,7 +204,13 @@ static enum hrtimer_restart vib_stop_timer(struct hrtimer *timer)
 					     stop_timer);
 
 	chip->state = 0;
+
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	queue_work(system_unbound_wq, &chip->vib_work);
+#else
 	schedule_work(&chip->vib_work);
+#endif
+
 	return HRTIMER_NORESTART;
 }
 
@@ -280,6 +292,7 @@ static ssize_t qpnp_vib_store_duration(struct device *dev,
 	int ret;
 
 	ret = kstrtouint(buf, 0, &val);
+
 	if (ret < 0)
 		return ret;
 
@@ -317,18 +330,34 @@ static ssize_t qpnp_vib_store_activate(struct device *dev,
 	int ret;
 
 	ret = kstrtouint(buf, 0, &val);
+
 	if (ret < 0)
 		return ret;
 
 	if (val != 0 && val != 1)
 		return count;
 
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	if ((hrtimer_active(&chip->stop_timer))&&
+		(chip->vib_play_ms == QPNP_VIB_MIN_PLAY_MS))
+		return count;
+#endif
+
 	mutex_lock(&chip->lock);
 	hrtimer_cancel(&chip->stop_timer);
 	chip->state = val;
-	pr_debug("state = %d, time = %llums\n", chip->state, chip->vib_play_ms);
+
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	pr_info("state = %d, time = %llums\n", chip->state, chip->vib_play_ms);
+#endif
+
 	mutex_unlock(&chip->lock);
+
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	queue_work(system_unbound_wq, &chip->vib_work);
+#else
 	schedule_work(&chip->vib_work);
+#endif
 
 	return count;
 }
