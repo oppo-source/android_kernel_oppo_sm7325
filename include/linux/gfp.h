@@ -47,8 +47,14 @@ struct vm_area_struct;
 #define ___GFP_CMA		0x1000000u
 #ifdef CONFIG_LIMIT_MOVABLE_ZONE_ALLOC
 #define ___GFP_OFFLINABLE	0x2000000u
+#ifdef CONFIG_OPLUS_SENSITIVE_MEM_ALLOC_OPT
+#define ___GFP_MEMPOOL	0x4000000u
+#endif
 #else
 #define ___GFP_OFFLINABLE	0
+#ifdef CONFIG_OPLUS_SENSITIVE_MEM_ALLOC_OPT
+#define ___GFP_MEMPOOL	0x2000000u
+#endif
 #endif
 
 /* If the above are modified, __GFP_BITS_SHIFT may need updating */
@@ -67,6 +73,9 @@ struct vm_area_struct;
 #define __GFP_CMA	((__force gfp_t)___GFP_CMA)
 #define __GFP_OFFLINABLE	((__force gfp_t)___GFP_OFFLINABLE)
 #define GFP_ZONEMASK	(__GFP_DMA|__GFP_HIGHMEM|__GFP_DMA32|__GFP_MOVABLE)
+#ifdef CONFIG_OPLUS_SENSITIVE_MEM_ALLOC_OPT
+#define __GFP_MEMPOOL	((__force gfp_t)___GFP_MEMPOOL)
+#endif
 
 /**
  * DOC: Page mobility and placement hints
@@ -226,7 +235,8 @@ struct vm_area_struct;
 #define __GFP_NOLOCKDEP ((__force gfp_t)___GFP_NOLOCKDEP)
 
 /* Room for N __GFP_FOO bits */
-#define __GFP_BITS_SHIFT (25 + IS_ENABLED(CONFIG_LIMIT_MOVABLE_ZONE_ALLOC))
+#define __GFP_BITS_SHIFT (25 + IS_ENABLED(CONFIG_LIMIT_MOVABLE_ZONE_ALLOC)  + IS_ENABLED(CONFIG_OPLUS_SENSITIVE_MEM_ALLOC_OPT))
+
 #ifdef CONFIG_LOCKDEP
 #define __GFP_BITS_MASK ((__force gfp_t)((1 << __GFP_BITS_SHIFT) - 1))
 #else
@@ -314,7 +324,9 @@ struct vm_area_struct;
 #define GFP_TRANSHUGE_LIGHT	((GFP_HIGHUSER_MOVABLE | __GFP_COMP | \
 			 __GFP_NOMEMALLOC | __GFP_NOWARN) & ~__GFP_RECLAIM)
 #define GFP_TRANSHUGE	(GFP_TRANSHUGE_LIGHT | __GFP_DIRECT_RECLAIM)
-
+#ifdef CONFIG_OPLUS_SENSITIVE_MEM_ALLOC_OPT
+#define GFP_MEMPOOL		__GFP_MEMPOOL
+#endif
 /* Convert GFP flags to their corresponding migrate type */
 #define GFP_MOVABLE_MASK (__GFP_RECLAIMABLE|__GFP_MOVABLE)
 #define GFP_MOVABLE_SHIFT 3
@@ -588,6 +600,7 @@ extern void __free_pages(struct page *page, unsigned int order);
 extern void free_pages(unsigned long addr, unsigned int order);
 extern void free_unref_page(struct page *page);
 extern void free_unref_page_list(struct list_head *list);
+extern bool free_unref_page_prepare2(struct page *page,unsigned int order, unsigned long pfn);
 
 struct page_frag_cache;
 extern void __page_frag_cache_drain(struct page *page, unsigned int count);

@@ -25,6 +25,21 @@
 #include <linux/seq_buf.h>
 #endif
 
+//#ifdef OPLUS_FEATURE_HEALTHINFO
+#ifdef CONFIG_OPLUS_HEALTHINFO
+#include <linux/healthinfo/ion.h>
+#endif
+//#endif /* OPLUS_FEATURE_HEALTHINFO */
+
+#ifdef OPLUS_FEATURE_HEALTHINFO
+#ifdef CONFIG_OPLUS_HEALTHINFO
+extern unsigned long gpu_total(void);
+#endif
+#endif /* OPLUS_FEATURE_HEALTHINFO */
+#ifdef CONFIG_HYBRIDSWAP
+#include <trace/hooks/vh_vmscan.h>
+#endif
+
 void __attribute__((weak)) arch_report_meminfo(struct seq_file *m)
 {
 }
@@ -182,7 +197,23 @@ static int meminfo_proc_show(struct seq_file *m, void *v)
 		hugetlb_report_meminfo(m);
 		arch_report_meminfo(m);
 	}
-
+#ifdef OPLUS_FEATURE_HEALTHINFO
+#if defined CONFIG_ION && defined CONFIG_OPLUS_HEALTHINFO
+	show_val_kb(m, "IonTotalCache:   ", global_zone_page_state(NR_IONCACHE_PAGES));
+	show_val_kb(m, "IonTotalUsed:   ", ion_total() >> PAGE_SHIFT);
+#endif
+#endif /* OPLUS_FEATURE_HEALTHINFO */
+#ifdef OPLUS_FEATURE_HEALTHINFO
+#ifdef CONFIG_OPLUS_HEALTHINFO
+	show_val_kb(m, "GPUTotalUsed:   ", gpu_total() >> PAGE_SHIFT);
+#endif
+#endif /* OPLUS_FEATURE_HEALTHINFO */
+#ifdef CONFIG_HYBRIDSWAP
+	trace_android_vh_meminfo_proc_show(m);
+#endif
+#ifdef CONFIG_OPLUS_SENSITIVE_MEM_ALLOC_OPT
+	show_val_kb(m, "OMemFree:    ", (unsigned long)oplus_sensitive_mem_pages(3, 0));
+#endif
 	return 0;
 }
 
