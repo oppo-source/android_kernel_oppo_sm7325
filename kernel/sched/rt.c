@@ -14,6 +14,22 @@
 #include "walt/walt.h"
 
 #include <trace/hooks/sched.h>
+#ifdef CONFIG_OPLUS_FEATURE_IM
+#include <linux/im/im.h>
+#endif
+
+#if defined(OPLUS_FEATURE_TASK_CPUSTATS) && defined(CONFIG_OPLUS_CTP)
+#include <trace/events/sched.h>
+#endif /* defined(OPLUS_FEATURE_TASK_CPUSTATS) && defined(CONFIG_OPLUS_CTP) */
+#if defined(OPLUS_FEATURE_TASK_CPUSTATS) && defined(CONFIG_UTILS_MONITOR)
+#include <linux/task_load.h>
+#endif
+#ifdef CONFIG_OPLUS_FEATURE_INPUT_BOOST
+#include <linux/tuning/rt_boost.h>
+#endif
+#ifdef CONFIG_OPLUS_FEATURE_GAME_OPT
+#include "../../drivers/soc/oplus/game_opt/game_ctrl.h"
+#endif
 
 int sched_rr_timeslice = RR_TIMESLICE;
 int sysctl_sched_rr_timeslice = (MSEC_PER_SEC / HZ) * RR_TIMESLICE;
@@ -60,11 +76,8 @@ void init_rt_bandwidth(struct rt_bandwidth *rt_b, u64 period, u64 runtime)
 	rt_b->rt_period_timer.function = sched_rt_period_timer;
 }
 
-static void start_rt_bandwidth(struct rt_bandwidth *rt_b)
+static inline void do_start_rt_bandwidth(struct rt_bandwidth *rt_b)
 {
-	if (!rt_bandwidth_enabled() || rt_b->rt_runtime == RUNTIME_INF)
-		return;
-
 	raw_spin_lock(&rt_b->rt_runtime_lock);
 	if (!rt_b->rt_period_active) {
 		rt_b->rt_period_active = 1;
@@ -81,6 +94,14 @@ static void start_rt_bandwidth(struct rt_bandwidth *rt_b)
 				      HRTIMER_MODE_ABS_PINNED_HARD);
 	}
 	raw_spin_unlock(&rt_b->rt_runtime_lock);
+}
+
+static void start_rt_bandwidth(struct rt_bandwidth *rt_b)
+{
+	if (!rt_bandwidth_enabled() || rt_b->rt_runtime == RUNTIME_INF)
+		return;
+
+	do_start_rt_bandwidth(rt_b);
 }
 
 void init_rt_rq(struct rt_rq *rt_rq)
@@ -1093,21 +1114,32 @@ static void update_curr_rt(struct rq *rq)
 	curr->se.sum_exec_runtime += delta_exec;
 	account_group_exec_runtime(curr, delta_exec);
 
+#if defined(OPLUS_FEATURE_TASK_CPUSTATS) && defined(CONFIG_UTILS_MONITOR)
+	account_normalize_runtime(curr, delta_exec, rq);
+#endif
+
 	curr->se.exec_start = now;
 	cgroup_account_cputime(curr, delta_exec);
+#ifdef CONFIG_OPLUS_FEATURE_GAME_OPT
+	g_update_task_runtime(curr, delta_exec);
+#endif
 
 	if (!rt_bandwidth_enabled())
 		return;
 
 	for_each_sched_rt_entity(rt_se) {
 		struct rt_rq *rt_rq = rt_rq_of_se(rt_se);
+		int exceeded;
 
 		if (sched_rt_runtime(rt_rq) != RUNTIME_INF) {
 			raw_spin_lock(&rt_rq->rt_runtime_lock);
 			rt_rq->rt_time += delta_exec;
-			if (sched_rt_runtime_exceeded(rt_rq))
+			exceeded = sched_rt_runtime_exceeded(rt_rq);
+			if (exceeded)
 				resched_curr(rq);
 			raw_spin_unlock(&rt_rq->rt_runtime_lock);
+			if (exceeded)
+				do_start_rt_bandwidth(sched_rt_bandwidth(rt_rq));
 		}
 	}
 }
@@ -1450,8 +1482,15 @@ enqueue_task_rt(struct rq *rq, struct task_struct *p, int flags)
 {
 	struct sched_rt_entity *rt_se = &p->rt;
 
+#if defined(OPLUS_FEATURE_TASK_CPUSTATS) && defined(CONFIG_OPLUS_CTP)
+	if (flags & ENQUEUE_WAKEUP) {
+		rt_se->timeout = 0;
+		trace_sched_blocked_reason(p);
+	}
+#else
 	if (flags & ENQUEUE_WAKEUP)
 		rt_se->timeout = 0;
+#endif /* defined(OPLUS_FEATURE_TASK_CPUSTATS) && defined(CONFIG_OPLUS_CTP) */
 
 	enqueue_rt_entity(rt_se, flags);
 	walt_inc_cumulative_runnable_avg(rq, p);
@@ -1539,6 +1578,11 @@ select_task_rq_rt(struct task_struct *p, int cpu, int sd_flag, int flags)
 	bool may_not_preempt;
 	bool test;
 	int target_cpu = -1;
+#ifdef CONFIG_OPLUS_FEATURE_INPUT_BOOST
+	struct rq *this_cpu_rq = NULL;
+	int this_cpu = -1;
+	bool sync = !!(flags && WF_SYNC);
+#endif
 
 	trace_android_rvh_select_task_rq_rt(p, cpu, sd_flag,
 					flags, &target_cpu);
@@ -1550,6 +1594,16 @@ select_task_rq_rt(struct task_struct *p, int cpu, int sd_flag, int flags)
 		goto out;
 
 	rq = cpu_rq(cpu);
+#ifdef CONFIG_OPLUS_FEATURE_INPUT_BOOST
+	this_cpu = raw_smp_processor_id();
+	this_cpu_rq = cpu_rq(this_cpu);
+
+	if (cpu_active(this_cpu) && cpumask_test_cpu(this_cpu, p->cpus_ptr) &&
+		should_honor_rt_sync(this_cpu_rq, p, sync)) {
+		cpu = this_cpu;
+		goto out;
+	}
+#endif
 
 	rcu_read_lock();
 	curr = READ_ONCE(rq->curr); /* unlocked access */
@@ -1685,6 +1739,11 @@ static void try_pull_rt_task(struct rq *this_rq)
 		goto unlock;
 
 	p = pick_highest_pushable_task(src_rq, this_cpu);
+#ifdef CONFIG_OPLUS_FEATURE_INPUT_BOOST
+	if (task_need_anim_boost(p, src_cpu, this_cpu)) {
+		p = NULL;
+	}
+#endif
 
 	if (!p)
 		goto unlock;
@@ -1888,6 +1947,23 @@ static int rt_energy_aware_wake_cpu(struct task_struct *task)
 	bool boost_on_big = rt_boost_on_big();
 	bool best_cpu_lt = true;
 
+#ifdef CONFIG_OPLUS_SF_BOOST
+	/* For surfaceflinger with util > 90, prefer to use big core */
+	if (task->compensate_need == 2 && tutil > 90)
+		boost_on_big = true;
+#endif
+#ifdef CONFIG_OPLUS_FEATURE_IM
+	/* For hwc with util > 51, prefer to use big core */
+	if (im_hwc(task) || im_hwbinder(task)) {
+#ifdef CONFIG_OPLUS_FEATURE_INPUT_BOOST
+		if (anim_boost_waker(current))
+			boost_on_big = true;
+#endif
+		if (tutil > 51)
+			boost_on_big = true;
+	}
+#endif
+
 	rcu_read_lock();
 
 	cpu = cpu_rq(smp_processor_id())->rd->wrd.min_cap_orig_cpu;
@@ -1923,7 +1999,11 @@ retry:
 			if (sched_cpu_high_irqload(cpu))
 				continue;
 
+#ifdef CONFIG_OPLUS_FEATURE_IM
+			if (__cpu_overutilized(cpu, tutil) && !im_hwc(task))
+#else
 			if (__cpu_overutilized(cpu, tutil))
+#endif
 				continue;
 
 			util = cpu_util(cpu);
@@ -2004,6 +2084,10 @@ static int find_lowest_rq(struct task_struct *task)
 	int cpu = -1;
 	int ret;
 	int lowest_cpu = -1;
+#ifdef CONFIG_OPLUS_FEATURE_INPUT_BOOST
+	int fbg_best_cpu = -1;
+	struct cpumask *fbg_target = NULL;
+#endif
 
 	trace_android_rvh_find_lowest_rq(task, lowest_mask, &lowest_cpu);
 	if (lowest_cpu >= 0)
@@ -2036,6 +2120,17 @@ static int find_lowest_rq(struct task_struct *task)
 
 	if (sched_energy_enabled())
 		cpu = rt_energy_aware_wake_cpu(task);
+
+#ifdef CONFIG_OPLUS_FEATURE_INPUT_BOOST
+	fbg_target = find_rtg_target(task);
+	if(fbg_target) {
+		fbg_best_cpu = find_fbg_cpu(task);
+		if (fbg_best_cpu >= 0) {
+			trace_sched_fbg_rt(task, cpu, fbg_best_cpu, cpumask_bits(lowest_mask)[0]);
+			cpu = fbg_best_cpu;
+		}
+	}
+#endif
 
 	if (cpu == -1)
 		cpu = task_cpu(task);
@@ -2185,6 +2280,10 @@ static int push_rt_task(struct rq *rq)
 	struct task_struct *next_task;
 	struct rq *lowest_rq;
 	int ret = 0;
+#ifdef CONFIG_OPLUS_FEATURE_INPUT_BOOST
+	int prev_cpu = -1;
+	int lowest_cpu = -1;
+#endif
 
 	if (!rq->rt.overloaded)
 		return 0;
@@ -2212,6 +2311,18 @@ retry:
 
 	/* find_lock_lowest_rq locks the rq if found */
 	lowest_rq = find_lock_lowest_rq(next_task, rq);
+#ifdef CONFIG_OPLUS_FEATURE_INPUT_BOOST
+	prev_cpu = task_cpu(next_task);
+	if (lowest_rq) {
+		lowest_cpu = cpu_of(lowest_rq);
+	} else {
+		lowest_cpu = -1;
+	}
+	if (task_need_anim_boost(next_task, prev_cpu, lowest_cpu)) {
+		double_unlock_balance(rq, lowest_rq);
+		lowest_rq = NULL;
+	}
+#endif
 	if (!lowest_rq) {
 		struct task_struct *task;
 		/*
@@ -3055,8 +3166,12 @@ static int sched_rt_global_validate(void)
 
 static void sched_rt_do_global(void)
 {
+	unsigned long flags;
+
+	raw_spin_lock_irqsave(&def_rt_bandwidth.rt_runtime_lock, flags);
 	def_rt_bandwidth.rt_runtime = global_rt_runtime();
 	def_rt_bandwidth.rt_period = ns_to_ktime(global_rt_period());
+	raw_spin_unlock_irqrestore(&def_rt_bandwidth.rt_runtime_lock, flags);
 }
 
 int sched_rt_handler(struct ctl_table *table, int write,
