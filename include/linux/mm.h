@@ -15,6 +15,7 @@
 #include <linux/atomic.h>
 #include <linux/debug_locks.h>
 #include <linux/mm_types.h>
+#include <linux/mmap_lock.h>
 #include <linux/range.h>
 #include <linux/pfn.h>
 #include <linux/percpu-refcount.h>
@@ -2372,6 +2373,11 @@ extern int watermark_scale_factor;
 extern atomic_long_t mmap_pages_allocated;
 extern int nommu_shrink_inode_mappings(struct inode *, size_t, size_t);
 
+#ifdef CONFIG_OPLUS_SENSITIVE_MEM_ALLOC_OPT
+extern atomic_long_t oplus_sensitive_mem_allocated;
+int oplus_sensitive_mem_pages(unsigned int order, int migratetype);
+#endif
+
 /* interval_tree.c */
 void vma_interval_tree_insert(struct vm_area_struct *node,
 			      struct rb_root_cached *root);
@@ -2483,6 +2489,7 @@ extern int install_special_mapping(struct mm_struct *mm,
 				   unsigned long flags, struct page **pages);
 
 unsigned long randomize_stack_top(unsigned long stack_top);
+unsigned long randomize_page(unsigned long start, unsigned long range);
 
 extern unsigned long get_unmapped_area(struct file *, unsigned long, unsigned long, unsigned long, unsigned long);
 

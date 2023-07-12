@@ -548,6 +548,9 @@ struct dwc3_msm {
 #define USB_SSPHY_1P8_VOL_MAX		1800000 /* uV */
 #define USB_SSPHY_1P8_HPM_LOAD		23000	/* uA */
 
+#ifdef OPLUS_FEATURE_CHG_BASIC
+struct device	*oplus_dev = NULL;
+#endif
 static void dwc3_pwr_event_handler(struct dwc3_msm *mdwc);
 static int dwc3_msm_gadget_vbus_draw(struct dwc3_msm *mdwc, unsigned int mA);
 static void dwc3_msm_notify_event(struct dwc3 *dwc,
@@ -2324,6 +2327,10 @@ static void dwc3_restart_usb_work(struct work_struct *w)
 
 	dwc->err_evt_seen = false;
 	flush_delayed_work(&mdwc->sm_work);
+
+	/* see comments in dwc3_msm_suspend */
+	if (!mdwc->vbus_active)
+		pm_relax(mdwc->dev);
 }
 
 /*
@@ -3375,6 +3382,12 @@ static int dwc3_msm_suspend(struct dwc3_msm *mdwc, bool force_power_collapse,
 
 	dwc3_msm_update_bus_bw(mdwc, BUS_VOTE_NONE);
 
+	/*
+	 * If in_restart is marked as true from restart work do not release the wakeup
+	 * active source as it can lead the device to enter system suspend (if usb is
+	 * the last holding the wakeup active source). If actual cable disconnect happens
+	 * while in_restart is true wakeup active source will be released from restart work.
+	 */
 	if (!mdwc->in_restart) {
 		/*
 		 * release wakeup source with timeout to defer system suspend to
@@ -3742,10 +3755,8 @@ skip_update:
 		dwc->maximum_speed, dwc->max_hw_supp_speed,
 		mdwc->override_usb_speed);
 	if (mdwc->override_usb_speed &&
-			mdwc->override_usb_speed <= dwc->maximum_speed) {
+			mdwc->override_usb_speed <= dwc->maximum_speed)
 		dwc->maximum_speed = mdwc->override_usb_speed;
-		dwc->gadget.max_speed = dwc->maximum_speed;
-	}
 
 	dbg_event(0xFF, "speed", dwc->maximum_speed);
 
@@ -4213,6 +4224,13 @@ static enum usb_role dwc3_msm_usb_get_role(struct device *dev)
 	return role;
 }
 
+#ifdef OPLUS_FEATURE_CHG_BASIC
+bool __attribute__((weak)) oplus_is_pd_svooc(void)
+{
+	return false;
+}
+#endif
+
 static int dwc3_msm_usb_set_role(struct device *dev, enum usb_role role)
 {
 	struct dwc3_msm *mdwc = dev_get_drvdata(dev);
@@ -4220,6 +4238,12 @@ static int dwc3_msm_usb_set_role(struct device *dev, enum usb_role role)
 	enum usb_role cur_role = USB_ROLE_NONE;
 
 	cur_role = dwc3_msm_usb_get_role(dev);
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	if (oplus_is_pd_svooc() == true) {
+		pr_err("!!!ignore the notify to start USB device mode");
+		return 0;
+	}
+#endif
 
 	switch (role) {
 	case USB_ROLE_HOST:
@@ -4269,6 +4293,15 @@ static struct usb_role_switch_desc role_desc = {
 	.get = dwc3_msm_usb_get_role,
 	.allow_userspace_control = true,
 };
+
+#ifdef OPLUS_FEATURE_CHG_BASIC
+void oplus_usb_set_none_role(void)
+{
+	if (oplus_dev)
+		dwc3_msm_usb_set_role(oplus_dev, USB_ROLE_NONE);
+}
+EXPORT_SYMBOL(oplus_usb_set_none_role);
+#endif
 
 static ssize_t orientation_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
@@ -5081,6 +5114,10 @@ static int dwc3_msm_probe(struct platform_device *pdev)
 		dwc3_ext_event_notify(mdwc);
 	}
 
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	oplus_dev = mdwc->dev;
+	printk(KERN_ERR "%s, init oplus_dev\n", __func__);
+#endif
 	device_create_file(&pdev->dev, &dev_attr_orientation);
 	device_create_file(&pdev->dev, &dev_attr_mode);
 	device_create_file(&pdev->dev, &dev_attr_speed);
