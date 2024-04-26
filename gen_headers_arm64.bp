@@ -201,6 +201,7 @@ gen_headers_out_arm64 = [
     "linux/dn.h",
     "linux/dns_resolver.h",
     "linux/dqblk_xfs.h",
+    "linux/eavb_shared.h",
     "linux/edd.h",
     "linux/efs_fs_sb.h",
     "linux/elf-em.h",
@@ -210,6 +211,7 @@ gen_headers_out_arm64 = [
     "linux/errno.h",
     "linux/errqueue.h",
     "linux/erspan.h",
+    "linux/esoc_ctrl.h",
     "linux/ethtool.h",
     "linux/eventpoll.h",
     "linux/fadvise.h",
@@ -363,6 +365,7 @@ gen_headers_out_arm64 = [
     "linux/memfd.h",
     "linux/mempolicy.h",
     "linux/meye.h",
+    "linux/mhi.h",
     "linux/mic_common.h",
     "linux/mic_ioctl.h",
     "linux/mii.h",
@@ -690,6 +693,9 @@ gen_headers_out_arm64 = [
     "scsi/scsi_bsg_ufs.h",
     "scsi/scsi_netlink.h",
     "scsi/scsi_netlink_fc.h",
+//#ifdef OPLUS_FEATURE_UFSPLUS
+    "scsi/ufs/ioctl.h",
+//#endif /* OPLUS_FEATURE_UFSPLUS */
     "sound/asequencer.h",
     "sound/asoc.h",
     "sound/asound.h",
@@ -856,7 +862,9 @@ gen_headers_out_arm64 = [
     "linux/netfilter_ipv4/ipt_CLUSTERIP.h",
     "linux/netfilter_ipv4/ipt_ECN.h",
     "linux/netfilter_ipv4/ipt_LOG.h",
+    "linux/netfilter_ipv4/ipt_NATTYPE.h",
     "linux/netfilter_ipv4/ipt_REJECT.h",
+    "linux/netfilter_ipv4/ipt_TRIGGER.h",
     "linux/netfilter_ipv4/ipt_TTL.h",
     "linux/netfilter_ipv4/ipt_ah.h",
     "linux/netfilter_ipv4/ipt_ecn.h",
@@ -973,6 +981,7 @@ gen_headers_out_arm64 = [
     "audio/linux/msm_audio_amrwb.h",
     "audio/linux/msm_audio_amrwbplus.h",
     "audio/linux/msm_audio_ape.h",
+    "audio/linux/msm_audio_ar.h",
     "audio/linux/msm_audio_calibration.h",
     "audio/linux/msm_audio_g711.h",
     "audio/linux/msm_audio_g711_dec.h",
@@ -1002,6 +1011,7 @@ gen_headers_out_arm64 = [
     "camera/media/cam_isp_ife.h",
     "camera/media/cam_isp_tfe.h",
     "camera/media/cam_isp_vfe.h",
+    "camera/media/cam_isp_sfe.h",
     "camera/media/cam_jpeg.h",
     "camera/media/cam_lrme.h",
     "camera/media/cam_ope.h",
@@ -1009,6 +1019,10 @@ gen_headers_out_arm64 = [
     "camera/media/cam_sensor.h",
     "camera/media/cam_sync.h",
     "camera/media/cam_tfe.h",
+//ifdef VENDOR_EDIT
+    "camera/oplus/media/oplus_cam_sensor.h",
+    "camera/oplus/media/oplus_cam_defs.h",
+//endif
     "display/drm/msm_drm_pp.h",
     "display/drm/sde_drm.h",
     "display/media/mmm_color_fmt.h",
@@ -1016,6 +1030,9 @@ gen_headers_out_arm64 = [
     "display/hdcp/msm_hdmi_hdcp_mgr.h",
     "vidc/media/msm_media_info.h",
     "vidc/media/msm_vidc_utils.h",
+//ifdef OPLUS_FEATURE_PXLW_IRIS5
+    "display/drm/msm_drm_iris.h",
+//endif
 ]
 
 genrule {
